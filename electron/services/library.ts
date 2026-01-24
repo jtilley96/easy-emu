@@ -144,7 +144,10 @@ function detectPlatformFromPath(filePath: string): string {
   for (const segment of foldersToCheck) {
     for (const { platform: platformId, hints } of PLATFORM_HINTS) {
       for (const hint of hints) {
-        if (segment.includes(hint)) {
+        // Use word boundary matching to prevent false positives (e.g., "console" matching "ns")
+        // Match hint as a complete word, not as a substring within another word
+        const regex = new RegExp(`\\b${hint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+        if (regex.test(segment)) {
           return platformId
         }
       }

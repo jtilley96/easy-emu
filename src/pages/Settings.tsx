@@ -610,6 +610,7 @@ function PathsSettings() {
 // Metadata Settings Section
 function MetadataSettings() {
   const { addToast } = useUIStore()
+  const { scrapeAllGames, cancelScrape, isScraping, scrapeProgress, games, loadLibrary } = useLibraryStore()
   const [autoScrape, setAutoScrape] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -631,6 +632,23 @@ function MetadataSettings() {
     setAutoScrape(checked)
     await window.electronAPI.config.set('autoScrape', checked)
     addToast('success', checked ? 'Auto-scrape enabled' : 'Auto-scrape disabled')
+  }
+
+  const handleScrapeAll = async () => {
+    try {
+      const results = await scrapeAllGames()
+      const successCount = results.filter(r => r.success && r.matched).length
+      await loadLibrary()
+      addToast('success', `Scraped ${successCount} of ${results.length} games`)
+    } catch (error) {
+      console.error('Failed to scrape all games:', error)
+      addToast('error', 'Failed to scrape all games')
+    }
+  }
+
+  const handleCancelScrape = async () => {
+    await cancelScrape()
+    addToast('info', 'Scraping cancelled')
   }
 
   if (loading) {
@@ -661,6 +679,59 @@ function MetadataSettings() {
             </p>
           </div>
         </label>
+      </section>
+
+      <section className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">Bulk Metadata Scraping</h3>
+        <p className="text-surface-400 mb-4">
+          Scrape metadata for all games in your library. This will fetch titles, cover art, descriptions, and other metadata from Hasheous.
+        </p>
+        
+        {isScraping && scrapeProgress && (
+          <div className="bg-surface-800 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Scraping progress</span>
+              <span className="text-sm text-surface-400">
+                {scrapeProgress.current} / {scrapeProgress.total}
+              </span>
+            </div>
+            <div className="w-full bg-surface-900 rounded-full h-2 mb-2">
+              <div
+                className="bg-accent h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(scrapeProgress.current / scrapeProgress.total) * 100}%` }}
+              />
+            </div>
+            <p className="text-sm text-surface-400 truncate">
+              {scrapeProgress.currentGame}
+            </p>
+            <button
+              onClick={handleCancelScrape}
+              className="mt-3 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleScrapeAll}
+            disabled={isScraping || games.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isScraping ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Scraping...
+              </>
+            ) : (
+              <>
+                <Download size={18} />
+                Scrape All Games ({games.length})
+              </>
+            )}
+          </button>
+        </div>
       </section>
 
       <section className="mb-8">

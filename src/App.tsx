@@ -13,6 +13,7 @@ import ToastContainer from './components/Toast'
 function App() {
   const { isFirstRun, checkFirstRun, isLoading } = useAppStore()
   const handlePlaySessionEnded = useLibraryStore(s => s.handlePlaySessionEnded)
+  const setScrapeProgress = useLibraryStore(s => s.setScrapeProgress)
 
   useEffect(() => {
     checkFirstRun()
@@ -25,6 +26,14 @@ function App() {
     )
     return unsubscribe
   }, [isFirstRun, isLoading, handlePlaySessionEnded])
+
+  useEffect(() => {
+    if (isFirstRun || isLoading) return
+    const unsubscribe = window.electronAPI.metadata.onScrapeProgress(
+      (progress) => setScrapeProgress(progress)
+    )
+    return unsubscribe
+  }, [isFirstRun, isLoading, setScrapeProgress])
 
   if (isLoading) {
     return (

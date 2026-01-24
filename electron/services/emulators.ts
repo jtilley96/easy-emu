@@ -49,7 +49,9 @@ export interface EmulatorDefinition {
   downloadUrl?: string
 }
 
-// RetroArch platform → core name (no extension). Cores live in {retroarch}/cores/.
+// RetroArch platform → core name (no extension). We try {retroarch}/cores/ first (Windows
+// standalone); if not found, we use -L auto so RetroArch finds cores in system dirs
+// (e.g. /usr/lib/libretro/, ~/Library/Application Support/RetroArch/cores/).
 const RETROARCH_CORE_BY_PLATFORM: Record<string, string> = {
   nes: 'fceumm_libretro',
   snes: 'snes9x_libretro',
@@ -429,22 +431,10 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
     throw new Error(`No emulator found for platform: ${game.platform}. Add one in Settings → Emulators.`)
   }
 
-  // Check for RetroArch core availability
-  if (emulatorDef.id === 'retroarch') {
-    const coreName = RETROARCH_CORE_BY_PLATFORM[game.platform]
-    if (coreName) {
-      const ext = getRetroArchCoreExt()
-      const coresDir = path.join(path.dirname(emulatorPath), 'cores')
-      const corePath = path.join(coresDir, coreName + ext)
-      if (!fs.existsSync(corePath)) {
-        throw new Error(
-          `RetroArch core not found for ${game.platform}.\n\n` +
-          `Required core: ${coreName}${ext}\n\n` +
-          `To install: Open RetroArch → Online Updater → Core Downloader and install the appropriate core.`
-        )
-      }
-    }
-  }
+  // RetroArch: We do not validate core paths here. Cores may live in {retroarch}/cores/ (Windows
+  // standalone), /usr/lib/libretro/, ~/Library/Application Support/RetroArch/cores/, etc. The
+  // launchArgs logic uses -L <core> when the core exists next to the executable, otherwise -L auto,
+  // which lets RetroArch find cores in system-wide and config directories.
 
   // Check for RPCS3 firmware
   if (emulatorDef.id === 'rpcs3') {
