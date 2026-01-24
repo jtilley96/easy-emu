@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Play,
@@ -5,19 +6,24 @@ import {
   Clock,
   Calendar,
   Folder,
-  Settings,
   Star,
   Edit,
   RefreshCw,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
+import { useUIStore } from '../store/uiStore'
 import { formatPlayTime, formatDate } from '../utils/format'
 
 export default function GameDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { games, launchGame } = useLibraryStore()
+  const { games, launchGame, toggleFavorite, loadLibrary, deleteGame } = useLibraryStore()
+  const { addToast } = useUIStore()
+  const [isScraping, setIsScraping] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const game = games.find(g => g.id === id)
 
@@ -36,7 +42,47 @@ export default function GameDetails() {
   }
 
   const handlePlay = async () => {
-    await launchGame(game.id)
+    try {
+      await launchGame(game.id)
+    } catch (error) {
+      addToast('error', 'Failed to launch game')
+    }
+  }
+
+  const handleScrape = async () => {
+    setIsScraping(true)
+    try {
+      const result = await window.electronAPI.metadata.scrape(game.id)
+      if (result) {
+        await loadLibrary()
+        addToast('success', 'Metadata updated successfully')
+      } else {
+        addToast('warning', 'No metadata found for this game')
+      }
+    } catch (error) {
+      addToast('error', 'Failed to scrape metadata')
+    } finally {
+      setIsScraping(false)
+    }
+  }
+
+  const handleToggleFavorite = async () => {
+    await toggleFavorite(game.id)
+    addToast('success', game.isFavorite ? 'Removed from favorites' : 'Added to favorites')
+  }
+
+  const handleDelete = async () => {
+    setIsDeleting(true)
+    try {
+      await deleteGame(game.id)
+      addToast('success', 'Game removed from library')
+      navigate('/')
+    } catch (error) {
+      addToast('error', 'Failed to delete game')
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+    }
   }
 
   return (
@@ -114,18 +160,69 @@ export default function GameDetails() {
                 Play
               </button>
 
-              <button className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg" title="Game settings">
-                <Settings size={20} />
+              <button
+                onClick={handleToggleFavorite}
+                className={`p-3 rounded-lg ${
+                  game.isFavorite
+                    ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30'
+                    : 'bg-surface-800 hover:bg-surface-700'
+                }`}
+                title={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <Star size={20} className={game.isFavorite ? 'fill-yellow-500' : ''} />
               </button>
 
-              <button className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg" title="Edit metadata">
+              <button
+                onClick={handleScrape}
+                disabled={isScraping}
+                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg disabled:opacity-50"
+                title="Re-scrape metadata"
+              >
+                {isScraping ? (
+                  <Loader2 size={20} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={20} />
+                )}
+              </button>
+
+              <button
+                onClick={() => addToast('info', 'Edit metadata coming soon')}
+                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg"
+                title="Edit metadata"
+              >
                 <Edit size={20} />
               </button>
 
-              <button className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg" title="Re-scrape metadata">
-                <RefreshCw size={20} />
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="p-3 bg-surface-800 hover:bg-red-500/20 hover:text-red-400 rounded-lg"
+                title="Remove from library"
+              >
+                <Trash2 size={20} />
               </button>
             </div>
+
+            {/* Delete confirmation */}
+            {showDeleteConfirm && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-red-400 mb-3">Remove "{game.title}" from your library?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded text-white disabled:opacity-50"
+                  >
+                    {isDeleting ? 'Removing...' : 'Remove'}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Stats */}
             <div className="flex gap-6 mb-6 text-sm">

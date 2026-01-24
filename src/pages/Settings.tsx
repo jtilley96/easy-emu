@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FolderOpen,
@@ -14,10 +14,12 @@ import {
   ExternalLink,
   Check,
   X,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLibraryStore } from '../store/libraryStore'
+import { useUIStore } from '../store/uiStore'
 
 type SettingsSection = 'library' | 'emulators' | 'bios' | 'paths' | 'metadata' | 'controllers' | 'general'
 
@@ -83,12 +85,19 @@ export default function Settings() {
 // Library Settings Section
 function LibrarySettings() {
   const { romFolders, addRomFolder, removeRomFolder, scanLibrary, isScanning } = useLibraryStore()
+  const { addToast } = useUIStore()
 
   const handleAddFolder = async () => {
     const path = await window.electronAPI.dialog.openDirectory()
     if (path) {
       addRomFolder(path)
+      addToast('success', `Added folder: ${path}`)
     }
+  }
+
+  const handleScan = async () => {
+    await scanLibrary()
+    addToast('success', 'Library scan complete')
   }
 
   return (
@@ -122,7 +131,10 @@ function LibrarySettings() {
                     <ExternalLink size={16} />
                   </button>
                   <button
-                    onClick={() => removeRomFolder(folder)}
+                    onClick={() => {
+                      removeRomFolder(folder)
+                      addToast('info', 'Folder removed')
+                    }}
                     className="p-2 hover:bg-red-500/20 text-red-400 rounded"
                     title="Remove folder"
                   >
@@ -143,7 +155,7 @@ function LibrarySettings() {
             Add Folder
           </button>
           <button
-            onClick={() => scanLibrary()}
+            onClick={handleScan}
             disabled={isScanning || romFolders.length === 0}
             className="flex items-center gap-2 px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -152,86 +164,155 @@ function LibrarySettings() {
           </button>
         </div>
       </section>
-
-      <section>
-        <h3 className="text-lg font-semibold mb-4">Scan Options</h3>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" defaultChecked className="w-4 h-4 accent-accent" />
-          <span>Scan subfolders recursively</span>
-        </label>
-        <label className="flex items-center gap-3 cursor-pointer mt-2">
-          <input type="checkbox" className="w-4 h-4 accent-accent" />
-          <span>Include hidden folders</span>
-        </label>
-      </section>
     </div>
   )
 }
 
 // Emulators Settings Section
 function EmulatorsSettings() {
-  const emulators = [
-    { id: 'retroarch', name: 'RetroArch', platforms: ['Multi-system'], status: 'detected', path: 'C:\\RetroArch\\retroarch.exe' },
-    { id: 'dolphin', name: 'Dolphin', platforms: ['GameCube', 'Wii'], status: 'not_installed', path: null },
-    { id: 'pcsx2', name: 'PCSX2', platforms: ['PS2'], status: 'not_installed', path: null },
-    { id: 'rpcs3', name: 'RPCS3', platforms: ['PS3'], status: 'not_installed', path: null },
-    { id: 'duckstation', name: 'DuckStation', platforms: ['PS1'], status: 'detected', path: 'C:\\DuckStation\\duckstation-qt-x64.exe' },
-    { id: 'ryujinx', name: 'Ryujinx', platforms: ['Switch'], status: 'not_installed', path: null }
-  ]
+  const [emulators, setEmulators] = useState<EmulatorInfo[]>([])
+  const [loading, setLoading] = useState(true)
+  const { addToast } = useUIStore()
+
+  const loadEmulators = async () => {
+    setLoading(true)
+    try {
+      const results = await window.electronAPI.emulators.detect()
+      setEmulators(results)
+    } catch (error) {
+      console.error('Failed to detect emulators:', error)
+      addToast('error', 'Failed to detect emulators')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadEmulators()
+  }, [])
+
+  const handleBrowse = async (emulatorId: string) => {
+    const path = await window.electronAPI.dialog.openFile([
+      { name: 'Executable', extensions: ['exe', 'app', ''] }
+    ])
+    if (path) {
+      await window.electronAPI.emulators.configure(emulatorId, { path })
+      await loadEmulators()
+      addToast('success', 'Emulator path updated')
+    }
+  }
+
+  const handleDownload = async (url: string) => {
+    await window.electronAPI.shell.openExternal(url)
+  }
+
+  const getPlatformNames = (platforms: string[]): string => {
+    const names: Record<string, string> = {
+      nes: 'NES', snes: 'SNES', n64: 'N64', gb: 'Game Boy', gbc: 'GBC', gba: 'GBA',
+      nds: 'NDS', gamecube: 'GameCube', wii: 'Wii', switch: 'Switch', genesis: 'Genesis',
+      ps1: 'PS1', ps2: 'PS2', ps3: 'PS3', psp: 'PSP', arcade: 'Arcade'
+    }
+    return platforms.map(p => names[p] || p).join(', ')
+  }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Emulator Settings</h2>
-
-      <div className="space-y-4">
-        {emulators.map(emu => (
-          <div key={emu.id} className="bg-surface-800 rounded-lg p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="font-semibold text-lg">{emu.name}</h3>
-                <p className="text-surface-400 text-sm">{emu.platforms.join(', ')}</p>
-              </div>
-              <span className={`flex items-center gap-1 text-sm ${
-                emu.status === 'detected' ? 'text-green-400' : 'text-surface-400'
-              }`}>
-                {emu.status === 'detected' ? <Check size={16} /> : <X size={16} />}
-                {emu.status === 'detected' ? 'Installed' : 'Not Installed'}
-              </span>
-            </div>
-
-            {emu.path && (
-              <div className="flex items-center gap-2 text-sm text-surface-400 mb-3">
-                <span className="font-mono truncate">{emu.path}</span>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <button className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm">
-                Browse
-              </button>
-              {emu.status === 'not_installed' && (
-                <button className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded text-sm">
-                  Install
-                </button>
-              )}
-              <button className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm">
-                Re-detect
-              </button>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold">Emulator Settings</h2>
+        <button
+          onClick={loadEmulators}
+          disabled={loading}
+          className="flex items-center gap-2 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+        >
+          <RefreshCw size={16} className={loading ? 'spinner' : ''} />
+          Re-detect All
+        </button>
       </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 size={32} className="animate-spin text-accent" />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {emulators.map(emu => (
+            <div key={emu.id} className="bg-surface-800 rounded-lg p-4">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-semibold text-lg">{emu.name}</h3>
+                  <p className="text-surface-400 text-sm">{getPlatformNames(emu.platforms)}</p>
+                </div>
+                <span className={`flex items-center gap-1 text-sm ${
+                  emu.installed ? 'text-green-400' : 'text-surface-400'
+                }`}>
+                  {emu.installed ? <Check size={16} /> : <X size={16} />}
+                  {emu.installed ? 'Installed' : 'Not Installed'}
+                </span>
+              </div>
+
+              {emu.path && (
+                <div className="flex items-center gap-2 text-sm text-surface-400 mb-3">
+                  <span className="font-mono truncate">{emu.path}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleBrowse(emu.id)}
+                  className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+                >
+                  Browse
+                </button>
+                {!emu.installed && emu.downloadUrl && (
+                  <button
+                    onClick={() => handleDownload(emu.downloadUrl!)}
+                    className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded text-sm"
+                  >
+                    Download
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // BIOS Settings Section
 function BiosSettings() {
-  const biosFiles = [
-    { id: 'ps1_bios', name: 'PS1 BIOS', required: true, status: 'missing', path: null },
-    { id: 'ps2_bios', name: 'PS2 BIOS', required: true, status: 'missing', path: null },
-    { id: 'gba_bios', name: 'GBA BIOS', required: false, status: 'found', path: 'C:\\EasyEmu\\bios\\gba_bios.bin' }
-  ]
+  const [biosFiles, setBiosFiles] = useState<BiosStatus[]>([])
+  const [loading, setLoading] = useState(true)
+  const { addToast } = useUIStore()
+
+  const loadBiosStatus = async () => {
+    setLoading(true)
+    try {
+      const status = await window.electronAPI.bios.checkStatus()
+      setBiosFiles(status)
+    } catch (error) {
+      console.error('Failed to load BIOS status:', error)
+      addToast('error', 'Failed to load BIOS status')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBiosStatus()
+  }, [])
+
+  const handleBrowse = async (biosId: string) => {
+    const path = await window.electronAPI.dialog.openFile([
+      { name: 'BIOS Files', extensions: ['bin', 'rom', 'BIN', 'ROM'] }
+    ])
+    if (path) {
+      const updatedStatus = await window.electronAPI.bios.setPath(biosId, path)
+      setBiosFiles(updatedStatus)
+      addToast('success', 'BIOS path updated')
+    }
+  }
 
   return (
     <div>
@@ -249,69 +330,132 @@ function BiosSettings() {
         </div>
       </div>
 
-      <div className="space-y-4">
-        {biosFiles.map(bios => (
-          <div key={bios.id} className="bg-surface-800 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-3">
-                <h3 className="font-semibold">{bios.name}</h3>
-                {bios.required && (
-                  <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded">
-                    Required
-                  </span>
-                )}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 size={32} className="animate-spin text-accent" />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {biosFiles.map(bios => (
+            <div key={bios.id} className="bg-surface-800 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-semibold">{bios.name}</h3>
+                  {bios.required ? (
+                    <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded">
+                      Required
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 bg-surface-600 text-surface-300 rounded">
+                      Optional
+                    </span>
+                  )}
+                </div>
+                <span className={`flex items-center gap-1 text-sm ${
+                  bios.found ? 'text-green-400' : 'text-surface-400'
+                }`}>
+                  {bios.found ? <Check size={16} /> : <X size={16} />}
+                  {bios.found ? 'Found' : 'Missing'}
+                </span>
               </div>
-              <span className={`flex items-center gap-1 text-sm ${
-                bios.status === 'found' ? 'text-green-400' : 'text-red-400'
-              }`}>
-                {bios.status === 'found' ? <Check size={16} /> : <X size={16} />}
-                {bios.status === 'found' ? 'Found' : 'Missing'}
-              </span>
+
+              <p className="text-sm text-surface-400 mb-2">{bios.description}</p>
+
+              {bios.path && (
+                <p className="text-surface-500 text-sm font-mono truncate mb-3">{bios.path}</p>
+              )}
+
+              <button
+                onClick={() => handleBrowse(bios.id)}
+                className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+              >
+                Browse
+              </button>
             </div>
-
-            {bios.path && (
-              <p className="text-surface-400 text-sm font-mono truncate mb-3">{bios.path}</p>
-            )}
-
-            <button className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm">
-              Browse
-            </button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // Paths Settings Section
 function PathsSettings() {
-  const paths = [
-    { id: 'saves', label: 'Save Data', path: 'C:\\Users\\User\\AppData\\Roaming\\EasyEmu\\saves' },
-    { id: 'states', label: 'Save States', path: 'C:\\Users\\User\\AppData\\Roaming\\EasyEmu\\states' },
-    { id: 'screenshots', label: 'Screenshots', path: 'C:\\Users\\User\\AppData\\Roaming\\EasyEmu\\screenshots' },
-    { id: 'covers', label: 'Cover Art', path: 'C:\\Users\\User\\AppData\\Roaming\\EasyEmu\\covers' }
+  const [paths, setPaths] = useState({
+    savesPath: '',
+    statesPath: '',
+    screenshotsPath: '',
+    coversPath: ''
+  })
+  const [loading, setLoading] = useState(true)
+  const { addToast } = useUIStore()
+
+  useEffect(() => {
+    const loadPaths = async () => {
+      try {
+        const config = await window.electronAPI.config.getAll() as Record<string, unknown>
+        setPaths({
+          savesPath: (config.savesPath as string) || '',
+          statesPath: (config.statesPath as string) || '',
+          screenshotsPath: (config.screenshotsPath as string) || '',
+          coversPath: (config.coversPath as string) || ''
+        })
+      } catch (error) {
+        console.error('Failed to load paths:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadPaths()
+  }, [])
+
+  const handleBrowse = async (key: keyof typeof paths) => {
+    const path = await window.electronAPI.dialog.openDirectory()
+    if (path) {
+      await window.electronAPI.config.set(key, path)
+      setPaths(prev => ({ ...prev, [key]: path }))
+      addToast('success', 'Path updated')
+    }
+  }
+
+  const pathItems = [
+    { key: 'savesPath' as const, label: 'Save Data' },
+    { key: 'statesPath' as const, label: 'Save States' },
+    { key: 'screenshotsPath' as const, label: 'Screenshots' },
+    { key: 'coversPath' as const, label: 'Cover Art' }
   ]
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 size={32} className="animate-spin text-accent" />
+      </div>
+    )
+  }
 
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Paths</h2>
 
       <div className="space-y-4">
-        {paths.map(item => (
-          <div key={item.id} className="bg-surface-800 rounded-lg p-4">
+        {pathItems.map(item => (
+          <div key={item.key} className="bg-surface-800 rounded-lg p-4">
             <label className="block text-sm font-medium mb-2">{item.label}</label>
             <div className="flex gap-2">
               <input
                 type="text"
-                value={item.path}
+                value={paths[item.key]}
                 readOnly
                 className="flex-1 bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm font-mono"
               />
-              <button className="px-3 py-2 bg-surface-700 hover:bg-surface-600 rounded text-sm">
+              <button
+                onClick={() => handleBrowse(item.key)}
+                className="px-3 py-2 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+              >
                 Browse
               </button>
               <button
-                onClick={() => window.electronAPI.shell.openPath(item.path)}
+                onClick={() => window.electronAPI.shell.openPath(paths[item.key])}
                 className="px-3 py-2 bg-surface-700 hover:bg-surface-600 rounded text-sm"
               >
                 Open
@@ -326,6 +470,67 @@ function PathsSettings() {
 
 // Metadata Settings Section
 function MetadataSettings() {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [preferredRegion, setPreferredRegion] = useState('us')
+  const [autoScrape, setAutoScrape] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const { addToast } = useUIStore()
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const config = await window.electronAPI.config.getAll() as Record<string, unknown>
+        setUsername((config.screenScraperUsername as string) || '')
+        setPassword((config.screenScraperPassword as string) || '')
+        setPreferredRegion((config.preferredRegion as string) || 'us')
+        setAutoScrape(config.autoScrape !== false)
+      } catch (error) {
+        console.error('Failed to load metadata settings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadSettings()
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await window.electronAPI.config.set('screenScraperUsername', username)
+      await window.electronAPI.config.set('screenScraperPassword', password)
+      await window.electronAPI.config.set('preferredRegion', preferredRegion)
+      await window.electronAPI.config.set('autoScrape', autoScrape)
+      addToast('success', 'Metadata settings saved')
+    } catch (error) {
+      console.error('Failed to save settings:', error)
+      addToast('error', 'Failed to save settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleClearCache = async () => {
+    try {
+      const coversPath = await window.electronAPI.config.get('coversPath') as string
+      if (coversPath) {
+        await window.electronAPI.shell.openPath(coversPath)
+        addToast('info', 'Opened covers folder - delete files manually to clear cache')
+      }
+    } catch (error) {
+      addToast('error', 'Failed to open covers folder')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 size={32} className="animate-spin text-accent" />
+      </div>
+    )
+  }
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Metadata Settings</h2>
@@ -335,11 +540,13 @@ function MetadataSettings() {
         <p className="text-surface-400 mb-4">
           Optional: Enter your ScreenScraper credentials for faster scraping (free account available).
         </p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium mb-2">Username</label>
             <input
               type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
               className="w-full bg-surface-800 border border-surface-700 rounded px-3 py-2"
               placeholder="Username"
             />
@@ -348,6 +555,8 @@ function MetadataSettings() {
             <label className="block text-sm font-medium mb-2">Password</label>
             <input
               type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
               className="w-full bg-surface-800 border border-surface-700 rounded px-3 py-2"
               placeholder="Password"
             />
@@ -357,28 +566,47 @@ function MetadataSettings() {
 
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Preferences</h3>
-        <div>
+        <div className="mb-4">
           <label className="block text-sm font-medium mb-2">Preferred Region</label>
-          <select className="bg-surface-800 border border-surface-700 rounded px-3 py-2">
+          <select
+            value={preferredRegion}
+            onChange={e => setPreferredRegion(e.target.value)}
+            className="bg-surface-800 border border-surface-700 rounded px-3 py-2"
+          >
             <option value="us">United States (US)</option>
             <option value="eu">Europe (EU)</option>
             <option value="jp">Japan (JP)</option>
             <option value="wor">World</option>
           </select>
         </div>
-        <label className="flex items-center gap-3 cursor-pointer mt-4">
-          <input type="checkbox" defaultChecked className="w-4 h-4 accent-accent" />
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoScrape}
+            onChange={e => setAutoScrape(e.target.checked)}
+            className="w-4 h-4 accent-accent"
+          />
           <span>Auto-scrape metadata when adding games</span>
         </label>
+      </section>
+
+      <section className="mb-8">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
       </section>
 
       <section>
         <h3 className="text-lg font-semibold mb-4">Actions</h3>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg">
-            Re-scrape All Games
-          </button>
-          <button className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg">
+          <button
+            onClick={handleClearCache}
+            className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg"
+          >
             Clear Metadata Cache
           </button>
         </div>
@@ -416,6 +644,50 @@ function ControllersSettings() {
 // General Settings Section
 function GeneralSettings() {
   const { setFirstRun } = useAppStore()
+  const { addToast } = useUIStore()
+  const [startMinimized, setStartMinimized] = useState(false)
+  const [checkUpdates, setCheckUpdates] = useState(true)
+  const [version, setVersion] = useState('0.0.0')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const config = await window.electronAPI.config.getAll() as Record<string, unknown>
+        setStartMinimized(config.startMinimized === true)
+        setCheckUpdates(config.checkUpdates !== false)
+        const ver = await window.electronAPI.app.getVersion()
+        setVersion(ver)
+      } catch (error) {
+        console.error('Failed to load general settings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadSettings()
+  }, [])
+
+  const handleStartMinimizedChange = async (checked: boolean) => {
+    setStartMinimized(checked)
+    await window.electronAPI.config.set('startMinimized', checked)
+  }
+
+  const handleCheckUpdatesChange = async (checked: boolean) => {
+    setCheckUpdates(checked)
+    await window.electronAPI.config.set('checkUpdates', checked)
+  }
+
+  const handleResetDefaults = async () => {
+    addToast('warning', 'This feature is not yet implemented')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 size={32} className="animate-spin text-accent" />
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -424,19 +696,32 @@ function GeneralSettings() {
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Startup</h3>
         <label className="flex items-center gap-3 cursor-pointer">
-          <input type="checkbox" className="w-4 h-4 accent-accent" />
+          <input
+            type="checkbox"
+            checked={startMinimized}
+            onChange={e => handleStartMinimizedChange(e.target.checked)}
+            className="w-4 h-4 accent-accent"
+          />
           <span>Start minimized to system tray</span>
         </label>
         <label className="flex items-center gap-3 cursor-pointer mt-2">
-          <input type="checkbox" defaultChecked className="w-4 h-4 accent-accent" />
+          <input
+            type="checkbox"
+            checked={checkUpdates}
+            onChange={e => handleCheckUpdatesChange(e.target.checked)}
+            className="w-4 h-4 accent-accent"
+          />
           <span>Check for updates on startup</span>
         </label>
       </section>
 
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Updates</h3>
-        <p className="text-surface-400 mb-4">Current version: 0.1.0</p>
-        <button className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg">
+        <p className="text-surface-400 mb-4">Current version: {version}</p>
+        <button
+          onClick={() => addToast('info', 'Update check not implemented yet')}
+          className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg"
+        >
           Check for Updates
         </button>
       </section>
@@ -445,12 +730,18 @@ function GeneralSettings() {
         <h3 className="text-lg font-semibold mb-4">Reset</h3>
         <div className="flex gap-3">
           <button
-            onClick={() => setFirstRun(true)}
+            onClick={() => {
+              setFirstRun(true)
+              addToast('info', 'Returning to setup wizard...')
+            }}
             className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg"
           >
             Re-run Setup Wizard
           </button>
-          <button className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg">
+          <button
+            onClick={handleResetDefaults}
+            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg"
+          >
             Reset to Defaults
           </button>
         </div>

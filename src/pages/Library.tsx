@@ -1,14 +1,22 @@
-import { useState, useMemo } from 'react'
-import { Search, Grid, List, SlidersHorizontal } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Search, Grid, List, SlidersHorizontal, Star, Clock } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
 import GameCard from '../components/GameCard'
 import SearchBar from '../components/SearchBar'
 
 type ViewMode = 'grid' | 'list'
 type SortBy = 'title' | 'lastPlayed' | 'platform' | 'recentlyAdded'
+type QuickFilter = 'recent' | 'favorites' | null
 
 export default function Library() {
-  const { games, isScanning } = useLibraryStore()
+  const { games, isScanning, loadLibrary } = useLibraryStore()
+  
+  useEffect(() => {
+    loadLibrary()
+  }, [loadLibrary])
+  const [searchParams] = useSearchParams()
+  const quickFilter = searchParams.get('filter') as QuickFilter
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortBy>('title')
@@ -21,6 +29,21 @@ export default function Library() {
 
   const filteredGames = useMemo(() => {
     let result = [...games]
+
+    // Quick filter (from sidebar)
+    if (quickFilter === 'favorites') {
+      result = result.filter(game => game.isFavorite)
+    } else if (quickFilter === 'recent') {
+      // Show games played in the last 30 days
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      result = result.filter(game => {
+        if (!game.lastPlayed) return false
+        return new Date(game.lastPlayed) >= thirtyDaysAgo
+      })
+      // Sort by last played for recent filter
+      result.sort((a, b) => (b.lastPlayed || '').localeCompare(a.lastPlayed || ''))
+    }
 
     // Search filter
     if (searchQuery) {
@@ -36,31 +59,39 @@ export default function Library() {
       result = result.filter(game => game.platform === filterPlatform)
     }
 
-    // Sort
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case 'title':
-          return a.title.localeCompare(b.title)
-        case 'lastPlayed':
-          return (b.lastPlayed || '').localeCompare(a.lastPlayed || '')
-        case 'platform':
-          return a.platform.localeCompare(b.platform)
-        case 'recentlyAdded':
-          return (b.addedAt || '').localeCompare(a.addedAt || '')
-        default:
-          return 0
-      }
-    })
+    // Sort (skip if quick filter already sorted)
+    if (quickFilter !== 'recent') {
+      result.sort((a, b) => {
+        switch (sortBy) {
+          case 'title':
+            return a.title.localeCompare(b.title)
+          case 'lastPlayed':
+            return (b.lastPlayed || '').localeCompare(a.lastPlayed || '')
+          case 'platform':
+            return a.platform.localeCompare(b.platform)
+          case 'recentlyAdded':
+            return (b.addedAt || '').localeCompare(a.addedAt || '')
+          default:
+            return 0
+        }
+      })
+    }
 
     return result
-  }, [games, searchQuery, sortBy, filterPlatform])
+  }, [games, searchQuery, sortBy, filterPlatform, quickFilter])
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-surface-800">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Library</h1>
+          <div className="flex items-center gap-2">
+            {quickFilter === 'favorites' && <Star size={24} className="text-yellow-400" />}
+            {quickFilter === 'recent' && <Clock size={24} className="text-accent" />}
+            <h1 className="text-2xl font-bold">
+              {quickFilter === 'favorites' ? 'Favorites' : quickFilter === 'recent' ? 'Recently Played' : 'Library'}
+            </h1>
+          </div>
           <span className="text-surface-400 text-sm">
             {filteredGames.length} {filteredGames.length === 1 ? 'game' : 'games'}
           </span>
@@ -146,6 +177,22 @@ export default function Library() {
                 >
                   Configure Library
                 </a>
+              </>
+            ) : quickFilter === 'favorites' ? (
+              <>
+                <Star size={48} className="text-surface-500 mb-4" />
+                <h2 className="text-xl font-semibold mb-2">No favorites yet</h2>
+                <p className="text-surface-400">
+                  Click the star icon on any game to add it to your favorites.
+                </p>
+              </>
+            ) : quickFilter === 'recent' ? (
+              <>
+                <Clock size={48} className="text-surface-500 mb-4" />
+                <h2 className="text-xl font-semibold mb-2">No recently played games</h2>
+                <p className="text-surface-400">
+                  Games you play will appear here for quick access.
+                </p>
               </>
             ) : (
               <>

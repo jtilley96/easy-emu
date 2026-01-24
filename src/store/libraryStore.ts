@@ -15,6 +15,7 @@ interface LibraryState {
   launchGame: (gameId: string, emulatorId?: string) => Promise<void>
   updateGame: (gameId: string, data: Partial<Game>) => Promise<void>
   toggleFavorite: (gameId: string) => Promise<void>
+  deleteGame: (gameId: string) => Promise<void>
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -114,6 +115,20 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     const game = get().games.find(g => g.id === gameId)
     if (game) {
       await get().updateGame(gameId, { isFavorite: !game.isFavorite })
+    }
+  },
+
+  deleteGame: async (gameId: string) => {
+    try {
+      await window.electronAPI.library.deleteGame(gameId)
+
+      // Remove game from state
+      set(state => ({
+        games: state.games.filter(g => g.id !== gameId)
+      }))
+    } catch (error) {
+      console.error('Failed to delete game:', error)
+      throw error
     }
   }
 }))

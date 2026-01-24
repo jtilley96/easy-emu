@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Play, MoreVertical, Star, Clock } from 'lucide-react'
+import { Play, Star, Clock } from 'lucide-react'
 import { Game } from '../types'
 import { formatPlayTime } from '../utils/format'
 import { useLibraryStore } from '../store/libraryStore'
@@ -10,12 +10,18 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
-  const { launchGame } = useLibraryStore()
+  const { launchGame, toggleFavorite } = useLibraryStore()
 
   const handlePlay = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     await launchGame(game.id)
+  }
+
+  const handleToggleFavorite = async (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    await toggleFavorite(game.id)
   }
 
   if (variant === 'list') {
@@ -60,6 +66,19 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
             </span>
           )}
         </div>
+
+        {/* Favorite button */}
+        <button
+          onClick={handleToggleFavorite}
+          className={`p-2 rounded-lg transition-colors ${
+            game.isFavorite
+              ? 'text-yellow-500'
+              : 'text-surface-400 hover:text-yellow-500 opacity-0 group-hover:opacity-100'
+          }`}
+          title={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          <Star size={18} className={game.isFavorite ? 'fill-yellow-500' : ''} />
+        </button>
 
         {/* Play button */}
         <button
@@ -110,13 +129,21 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
           {game.platform}
         </span>
 
-        {/* Favorite indicator */}
-        {game.isFavorite && (
+        {/* Favorite button */}
+        <button
+          onClick={handleToggleFavorite}
+          className={`absolute top-2 right-2 p-1 rounded transition-opacity ${
+            game.isFavorite
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-100 hover:bg-black/50'
+          }`}
+          title={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
           <Star
-            size={16}
-            className="absolute top-2 right-2 text-yellow-500 fill-yellow-500"
+            size={18}
+            className={game.isFavorite ? 'text-yellow-500 fill-yellow-500' : 'text-white'}
           />
-        )}
+        </button>
       </div>
 
       {/* Info */}

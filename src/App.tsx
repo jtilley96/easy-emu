@@ -7,6 +7,7 @@ import GameDetails from './pages/GameDetails'
 import Settings from './pages/Settings'
 import SystemBrowser from './pages/SystemBrowser'
 import SetupWizard from './pages/SetupWizard'
+import ToastContainer from './components/Toast'
 
 function App() {
   const { isFirstRun, checkFirstRun, isLoading } = useAppStore()
@@ -27,20 +28,28 @@ function App() {
   }
 
   if (isFirstRun) {
-    return <SetupWizard />
+    return (
+      <>
+        <SetupWizard />
+        <ToastContainer />
+      </>
+    )
   }
 
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Library />} />
-        <Route path="/game/:id" element={<GameDetails />} />
-        <Route path="/systems" element={<SystemBrowser />} />
-        <Route path="/systems/:platform" element={<SystemBrowser />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/:section" element={<Settings />} />
-      </Routes>
-    </Layout>
+    <>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Library />} />
+          <Route path="/game/:id" element={<GameDetails />} />
+          <Route path="/systems" element={<SystemBrowser />} />
+          <Route path="/systems/:platform" element={<SystemBrowser />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings/:section" element={<Settings />} />
+        </Routes>
+      </Layout>
+      <ToastContainer />
+    </>
   )
 }
 
