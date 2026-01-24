@@ -28,6 +28,7 @@ declare global {
     path: string | null
     platforms: string[]
     installed: boolean
+    enabled: boolean
     canInstall: boolean
     downloadUrl: string | null
   }
@@ -96,7 +97,11 @@ declare global {
       detect: () => Promise<EmulatorInfo[]>
       launch: (gameId: string, emulatorId?: string) => Promise<void>
       getInstalled: () => Promise<EmulatorInfo[]>
+      getPlatformsWithEmulator: () => Promise<string[]>
       configure: (emulatorId: string, config: Record<string, unknown>) => Promise<void>
+      openSettings: (emulatorId: string) => Promise<void>
+      getVersion: (emulatorId: string) => Promise<string>
+      onPlaySessionEnded: (callback: (gameId: string, durationMinutes: number) => void) => () => void
     }
     metadata: {
       update: (gameId: string, metadata: Partial<GameMetadata>) => Promise<void>

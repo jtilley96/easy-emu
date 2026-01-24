@@ -1,7 +1,7 @@
 import { registerConfigHandlers, loadConfig } from './config'
 import { BrowserWindow } from 'electron'
 import { registerLibraryHandlers, initDatabase } from './library'
-import { registerEmulatorHandlers } from './emulators'
+import { registerEmulatorHandlers, setEmulatorMainWindow } from './emulators'
 import { registerMetadataHandlers } from './metadata'
 import { registerBiosHandlers } from './bios'
 
@@ -18,6 +18,8 @@ export function initializeServices(mainWindow?: BrowserWindow | null): void {
   registerEmulatorHandlers()
   registerMetadataHandlers()
   registerBiosHandlers()
+
+  setEmulatorMainWindow(mainWindow ?? null)
 }
 
 export { loadConfig, getConfigValue, setConfigValue } from './config'

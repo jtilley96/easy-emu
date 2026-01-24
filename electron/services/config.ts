@@ -6,6 +6,8 @@ export interface AppConfig {
   hasCompletedSetup: boolean
   romFolders: string[]
   emulatorPaths: Record<string, string>
+  defaultEmulatorPerPlatform: Record<string, string>
+  emulatorEnabled: Record<string, boolean>
   biosPaths: Record<string, string>
   savesPath: string
   statesPath: string
@@ -30,6 +32,8 @@ function getDefaultConfig(): AppConfig {
     hasCompletedSetup: false,
     romFolders: [],
     emulatorPaths: {},
+    defaultEmulatorPerPlatform: {},
+    emulatorEnabled: {},
     biosPaths: {},
     savesPath: path.join(userData, 'saves'),
     statesPath: path.join(userData, 'states'),

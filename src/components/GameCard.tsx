@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Play, Star, Clock } from 'lucide-react'
 import { Game } from '../types'
 import { formatPlayTime } from '../utils/format'
 import { pathToLocalImageUrl } from '../utils/image'
 import { useLibraryStore } from '../store/libraryStore'
+import { useUIStore } from '../store/uiStore'
 
 interface GameCardProps {
   game: Game
@@ -11,12 +13,24 @@ interface GameCardProps {
 }
 
 export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
-  const { launchGame, toggleFavorite } = useLibraryStore()
+  const { launchGame, toggleFavorite, platformsWithEmulator } = useLibraryStore()
+  const { addToast } = useUIStore()
+  const [launching, setLaunching] = useState(false)
+
+  const canPlay = platformsWithEmulator.includes(game.platform)
+  const noEmulatorTooltip = `No emulator configured for ${game.platform}. Add one in Settings → Emulators.`
 
   const handlePlay = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    await launchGame(game.id)
+    setLaunching(true)
+    try {
+      await launchGame(game.id, game.preferredEmulator || undefined)
+    } catch (err) {
+      addToast('error', (err as Error)?.message ?? 'Failed to launch game')
+    } finally {
+      setLaunching(false)
+    }
   }
 
   const handleToggleFavorite = async (e: React.MouseEvent) => {
@@ -84,8 +98,11 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
         {/* Play button */}
         <button
           onClick={handlePlay}
-          className="p-3 bg-accent hover:bg-accent-hover rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-          title="Play"
+          disabled={launching}
+          className={`p-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${
+            canPlay ? 'bg-accent hover:bg-accent-hover' : 'bg-amber-600/80 hover:bg-amber-600'
+          } disabled:opacity-70`}
+          title={canPlay ? (launching ? 'Launching…' : 'Play') : noEmulatorTooltip}
         >
           <Play size={18} fill="currentColor" />
         </button>
@@ -118,8 +135,11 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
           <button
             onClick={handlePlay}
-            className="p-4 bg-accent hover:bg-accent-hover rounded-full transform scale-90 group-hover:scale-100 transition-transform"
-            title="Play"
+            disabled={launching}
+            className={`p-4 rounded-full transform scale-90 group-hover:scale-100 transition-transform disabled:opacity-70 ${
+              canPlay ? 'bg-accent hover:bg-accent-hover' : 'bg-amber-600/80 hover:bg-amber-600'
+            }`}
+            title={canPlay ? (launching ? 'Launching…' : 'Play') : noEmulatorTooltip}
           >
             <Play size={24} fill="currentColor" />
           </button>

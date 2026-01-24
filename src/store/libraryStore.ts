@@ -6,9 +6,11 @@ interface LibraryState {
   romFolders: string[]
   isScanning: boolean
   scanProgress: { total: number; scanned: number; current: string } | null
+  platformsWithEmulator: string[]
 
   // Actions
   loadLibrary: () => Promise<void>
+  refreshPlatformsWithEmulator: () => Promise<void>
   addRomFolder: (path: string) => void
   removeRomFolder: (path: string) => void
   scanLibrary: () => Promise<void>
@@ -16,6 +18,7 @@ interface LibraryState {
   updateGame: (gameId: string, data: Partial<Game>) => Promise<void>
   toggleFavorite: (gameId: string) => Promise<void>
   deleteGame: (gameId: string) => Promise<void>
+  handlePlaySessionEnded: (gameId: string, durationMinutes: number) => void
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -23,6 +26,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   romFolders: [],
   isScanning: false,
   scanProgress: null,
+  platformsWithEmulator: [],
 
   loadLibrary: async () => {
     try {
@@ -35,8 +39,20 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       // Load games from database
       const games = await window.electronAPI.library.getGames()
       set({ games })
+
+      const platforms = await window.electronAPI.emulators.getPlatformsWithEmulator()
+      set({ platformsWithEmulator: platforms })
     } catch (error) {
       console.error('Failed to load library:', error)
+    }
+  },
+
+  refreshPlatformsWithEmulator: async () => {
+    try {
+      const platforms = await window.electronAPI.emulators.getPlatformsWithEmulator()
+      set({ platformsWithEmulator: platforms })
+    } catch (error) {
+      console.error('Failed to refresh platforms:', error)
     }
   },
 
@@ -79,17 +95,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     try {
       await window.electronAPI.emulators.launch(gameId, emulatorId)
 
-      // Update last played timestamp
-      const game = get().games.find(g => g.id === gameId)
-      if (game) {
-        const updatedGame = {
-          ...game,
-          lastPlayed: new Date().toISOString()
-        }
-        set(state => ({
-          games: state.games.map(g => g.id === gameId ? updatedGame : g)
-        }))
-      }
+      // Persist last played and update local state
+      const lastPlayed = new Date().toISOString()
+      await get().updateGame(gameId, { lastPlayed })
     } catch (error) {
       console.error('Failed to launch game:', error)
       throw error
@@ -130,5 +138,15 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       console.error('Failed to delete game:', error)
       throw error
     }
+  },
+
+  handlePlaySessionEnded: (gameId: string, durationMinutes: number) => {
+    set(state => ({
+      games: state.games.map(g =>
+        g.id === gameId
+          ? { ...g, playTime: (g.playTime ?? 0) + durationMinutes }
+          : g
+      )
+    }))
   }
 }))

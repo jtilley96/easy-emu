@@ -52,8 +52,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     launch: (gameId: string, emulatorId?: string) =>
       ipcRenderer.invoke('emulators:launch', gameId, emulatorId),
     getInstalled: () => ipcRenderer.invoke('emulators:getInstalled'),
+    getPlatformsWithEmulator: () => ipcRenderer.invoke('emulators:getPlatformsWithEmulator'),
     configure: (emulatorId: string, config: Record<string, unknown>) =>
-      ipcRenderer.invoke('emulators:configure', emulatorId, config)
+      ipcRenderer.invoke('emulators:configure', emulatorId, config),
+    openSettings: (emulatorId: string) => ipcRenderer.invoke('emulators:openSettings', emulatorId),
+    getVersion: (emulatorId: string) => ipcRenderer.invoke('emulators:getVersion', emulatorId),
+    onPlaySessionEnded: (callback: (gameId: string, durationMinutes: number) => void) => {
+      const fn = (_: unknown, payload: { gameId: string; durationMinutes: number }) =>
+        callback(payload.gameId, payload.durationMinutes)
+      ipcRenderer.on('emulators:playSessionEnded', fn)
+      return () => ipcRenderer.removeListener('emulators:playSessionEnded', fn)
+    }
   },
 
   // Metadata operations
@@ -111,7 +120,11 @@ export interface ElectronAPI {
     detect: () => Promise<EmulatorInfo[]>
     launch: (gameId: string, emulatorId?: string) => Promise<void>
     getInstalled: () => Promise<EmulatorInfo[]>
+    getPlatformsWithEmulator: () => Promise<string[]>
     configure: (emulatorId: string, config: Record<string, unknown>) => Promise<void>
+    openSettings: (emulatorId: string) => Promise<void>
+    getVersion: (emulatorId: string) => Promise<string>
+    onPlaySessionEnded: (callback: (gameId: string, durationMinutes: number) => void) => () => void
   }
   metadata: {
     update: (gameId: string, metadata: Partial<GameMetadata>) => Promise<void>

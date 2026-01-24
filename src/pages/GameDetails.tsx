@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Play,
@@ -8,25 +8,37 @@ import {
   Folder,
   Star,
   Edit,
-  Trash2
+  Trash2,
+  Settings2
 } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import { formatPlayTime, formatDate } from '../utils/format'
 import { pathToLocalImageUrl } from '../utils/image'
 import EditMetadataModal from '../components/EditMetadataModal'
+import GameSettingsModal from '../components/GameSettingsModal'
 import ScreenshotGallery from '../components/ScreenshotGallery'
 
 export default function GameDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { games, launchGame, toggleFavorite, deleteGame } = useLibraryStore()
+  const { games, launchGame, toggleFavorite, deleteGame, platformsWithEmulator, loadLibrary } = useLibraryStore()
   const { addToast } = useUIStore()
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [showGameSettingsModal, setShowGameSettingsModal] = useState(false)
+  const [launching, setLaunching] = useState(false)
 
   const game = games.find(g => g.id === id)
+  const canPlay = game ? platformsWithEmulator.includes(game.platform) : false
+  const noEmulatorTooltip = game
+    ? `No emulator configured for ${game.platform}. Add one in Settings → Emulators.`
+    : ''
+
+  useEffect(() => {
+    loadLibrary()
+  }, [loadLibrary])
 
   if (!game) {
     return (
@@ -43,10 +55,14 @@ export default function GameDetails() {
   }
 
   const handlePlay = async () => {
+    if (!game) return
+    setLaunching(true)
     try {
-      await launchGame(game.id)
+      await launchGame(game.id, game.preferredEmulator || undefined)
     } catch (error) {
-      addToast('error', 'Failed to launch game')
+      addToast('error', (error as Error)?.message ?? 'Failed to launch game')
+    } finally {
+      setLaunching(false)
     }
   }
 
@@ -138,10 +154,14 @@ export default function GameDetails() {
             <div className="flex gap-3 mb-6">
               <button
                 onClick={handlePlay}
-                className="flex items-center gap-2 px-6 py-3 bg-accent hover:bg-accent-hover rounded-lg font-semibold text-lg"
+                disabled={launching}
+                title={!canPlay ? noEmulatorTooltip : undefined}
+                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-lg ${
+                  canPlay ? 'bg-accent hover:bg-accent-hover' : 'bg-amber-600/80 hover:bg-amber-600'
+                } disabled:opacity-70`}
               >
                 <Play size={24} fill="currentColor" />
-                Play
+                {launching ? 'Launching…' : 'Play'}
               </button>
 
               <button
@@ -162,6 +182,14 @@ export default function GameDetails() {
                 title="Edit metadata"
               >
                 <Edit size={20} />
+              </button>
+
+              <button
+                onClick={() => setShowGameSettingsModal(true)}
+                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg"
+                title="Game settings (emulator override)"
+              >
+                <Settings2 size={20} />
               </button>
 
               <button
@@ -270,6 +298,15 @@ export default function GameDetails() {
           game={game}
           isOpen={showEditModal}
           onClose={() => setShowEditModal(false)}
+        />
+      )}
+
+      {/* Game Settings Modal */}
+      {game && (
+        <GameSettingsModal
+          game={game}
+          isOpen={showGameSettingsModal}
+          onClose={() => setShowGameSettingsModal(false)}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAppStore } from './store/appStore'
+import { useLibraryStore } from './store/libraryStore'
 import Layout from './components/Layout'
 import Library from './pages/Library'
 import GameDetails from './pages/GameDetails'
@@ -11,10 +12,19 @@ import ToastContainer from './components/Toast'
 
 function App() {
   const { isFirstRun, checkFirstRun, isLoading } = useAppStore()
+  const handlePlaySessionEnded = useLibraryStore(s => s.handlePlaySessionEnded)
 
   useEffect(() => {
     checkFirstRun()
   }, [checkFirstRun])
+
+  useEffect(() => {
+    if (isFirstRun || isLoading) return
+    const unsubscribe = window.electronAPI.emulators.onPlaySessionEnded(
+      (gameId, durationMinutes) => handlePlaySessionEnded(gameId, durationMinutes)
+    )
+    return unsubscribe
+  }, [isFirstRun, isLoading, handlePlaySessionEnded])
 
   if (isLoading) {
     return (

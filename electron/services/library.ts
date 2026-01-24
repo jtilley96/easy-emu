@@ -23,6 +23,7 @@ export interface GameRecord {
   lastPlayed?: string
   addedAt: string
   isFavorite: boolean
+  preferredEmulator?: string
 }
 
 interface LibraryData {
@@ -45,6 +46,7 @@ const EXTENSION_PLATFORM_MAP: Record<string, string> = {
   '.iso': 'unknown',
   '.bin': 'unknown',
   '.cue': 'unknown',
+  '.pkg': 'ps3',
   '.pbp': 'psp',
   '.nsp': 'switch', '.xci': 'switch',
   '.gcm': 'gamecube', '.gcz': 'gamecube', '.rvz': 'gamecube',
@@ -76,6 +78,17 @@ export function initDatabase(): void {
     if (fs.existsSync(libraryPath)) {
       const data = fs.readFileSync(libraryPath, 'utf-8')
       libraryData = JSON.parse(data)
+      // Re-detect platform for games stored as "unknown" (e.g. .iso/.bin without path hints)
+      let updated = false
+      for (const g of libraryData.games) {
+        if (g.platform !== 'unknown') continue
+        const detected = detectPlatformFromPath(g.path)
+        if (detected !== 'unknown') {
+          g.platform = detected
+          updated = true
+        }
+      }
+      if (updated) saveLibrary()
     }
   } catch (error) {
     console.error('Failed to load library:', error)
@@ -91,6 +104,25 @@ function getTitleFromFilename(filePath: string): string {
     .trim()
 }
 
+// Folder/path substring hints for ambiguous extensions (.iso, .bin, .cue, .chd).
+// Checked in order; first match wins. Prefer more specific (e.g. ps3) before general (e.g. ps1).
+const PLATFORM_HINTS: { platform: string; hints: string[] }[] = [
+  { platform: 'ps3', hints: ['ps3', 'playstation 3', 'playstation3', 'rpcs3', 'ps 3', 'ps-3'] },
+  { platform: 'ps2', hints: ['ps2', 'playstation 2', 'playstation2'] },
+  { platform: 'ps1', hints: ['ps1', 'psx', 'playstation', 'playstation 1'] },
+  { platform: 'psp', hints: ['psp', 'playstation portable'] },
+  { platform: 'wii', hints: ['wii'] },
+  { platform: 'gamecube', hints: ['gamecube', 'gc', 'game cube'] },
+  { platform: 'switch', hints: ['switch', 'ns', 'nintendo switch'] },
+  { platform: 'saturn', hints: ['saturn', 'sega saturn'] },
+  { platform: 'dreamcast', hints: ['dreamcast', 'dc', 'sega dreamcast'] },
+  { platform: 'genesis', hints: ['genesis', 'megadrive', 'mega drive', 'sega genesis'] },
+  { platform: 'snes', hints: ['snes', 'super nintendo', 'super famicom', 'sfc'] },
+  { platform: 'nes', hints: ['nes', 'nintendo entertainment', 'famicom'] },
+  { platform: 'n64', hints: ['n64', 'nintendo 64', 'n64'] },
+  { platform: 'arcade', hints: ['arcade', 'mame', 'fbneo'] }
+]
+
 function detectPlatformFromPath(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase()
   const platform = EXTENSION_PLATFORM_MAP[ext]
@@ -99,24 +131,22 @@ function detectPlatformFromPath(filePath: string): string {
     return platform
   }
 
-  const lowerPath = filePath.toLowerCase()
-  const platformHints: Record<string, string[]> = {
-    'ps1': ['ps1', 'psx', 'playstation'],
-    'ps2': ['ps2', 'playstation 2', 'playstation2'],
-    'ps3': ['ps3', 'playstation 3', 'playstation3'],
-    'psp': ['psp'],
-    'gamecube': ['gamecube', 'gc'],
-    'wii': ['wii'],
-    'switch': ['switch', 'ns'],
-    'genesis': ['genesis', 'megadrive', 'mega drive'],
-    'saturn': ['saturn'],
-    'dreamcast': ['dreamcast', 'dc']
-  }
+  const lowerPath = filePath.toLowerCase().replace(/\\/g, '/')
+  const pathSegments = lowerPath.split('/')
+  const filenameNoExt = path.basename(filePath, path.extname(filePath)).toLowerCase()
 
-  for (const [platformId, hints] of Object.entries(platformHints)) {
-    for (const hint of hints) {
-      if (lowerPath.includes(hint)) {
-        return platformId
+  // Check: filename (e.g. "Game (PS3).iso"), parent folder, grandparent, then full path.
+  const foldersToCheck: string[] = [filenameNoExt]
+  if (pathSegments.length >= 2) foldersToCheck.push(pathSegments[pathSegments.length - 2])
+  if (pathSegments.length >= 3) foldersToCheck.push(pathSegments[pathSegments.length - 3])
+  foldersToCheck.push(lowerPath)
+
+  for (const segment of foldersToCheck) {
+    for (const { platform: platformId, hints } of PLATFORM_HINTS) {
+      for (const hint of hints) {
+        if (segment.includes(hint)) {
+          return platformId
+        }
       }
     }
   }

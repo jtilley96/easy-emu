@@ -4,6 +4,7 @@ import { Game } from '../types'
 import { useUIStore } from '../store/uiStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { pathToLocalImageUrl } from '../utils/image'
+import { PLATFORMS } from '../constants/platforms'
 
 interface EditMetadataModalProps {
   game: Game
@@ -13,6 +14,7 @@ interface EditMetadataModalProps {
 
 export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadataModalProps) {
   const [title, setTitle] = useState(game.title)
+  const [platform, setPlatform] = useState(game.platform)
   const [description, setDescription] = useState(game.description || '')
   const [developer, setDeveloper] = useState(game.developer || '')
   const [publisher, setPublisher] = useState(game.publisher || '')
@@ -28,6 +30,7 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
   useEffect(() => {
     if (isOpen) {
       setTitle(game.title)
+      setPlatform(game.platform)
       setDescription(game.description || '')
       setDeveloper(game.developer || '')
       setPublisher(game.publisher || '')
@@ -49,6 +52,7 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
 
       const metadata: Record<string, unknown> = {
         title: title.trim() || game.title,
+        platform: platform.trim() || game.platform,
         description: description.trim() || undefined,
         developer: developer.trim() || undefined,
         publisher: publisher.trim() || undefined,
@@ -140,6 +144,25 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
               className="w-full bg-surface-800 border border-surface-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Platform</label>
+            <select
+              value={platform}
+              onChange={e => setPlatform(e.target.value)}
+              className="w-full bg-surface-800 border border-surface-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <option value="unknown">Unknown (fix if detection failed)</option>
+              {PLATFORMS.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.shortName} – {p.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-surface-500 mt-1">
+              Used for launching. Set to PS3, SNES, etc. when auto-detect misses it (e.g. plain .iso in a generic folder).
+            </p>
           </div>
 
           <div>
