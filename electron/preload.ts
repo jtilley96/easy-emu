@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Dialog
   dialog: {
-    openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+    openDirectory: (defaultPath?: string) => ipcRenderer.invoke('dialog:openDirectory', defaultPath),
     openFile: (filters?: { name: string; extensions: string[] }[]) =>
       ipcRenderer.invoke('dialog:openFile', filters)
   },
@@ -156,7 +156,7 @@ export interface ElectronAPI {
     onMaximizeChange: (callback: (isMaximized: boolean) => void) => void
   }
   dialog: {
-    openDirectory: () => Promise<string | null>
+    openDirectory: (defaultPath?: string) => Promise<string | null>
     openFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
   }
   shell: {

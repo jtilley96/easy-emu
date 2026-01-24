@@ -19,6 +19,13 @@ const COLUMNS_BY_SIZE = {
   large: 5
 }
 
+// Card sizes to calculate minimum column width
+const CARD_SIZES = {
+  small: { width: 160 },
+  medium: { width: 200 },
+  large: { width: 240 }
+}
+
 export default function BPGameGrid({
   games,
   enabled = true,
@@ -31,6 +38,9 @@ export default function BPGameGrid({
   const gridRef = useRef<HTMLDivElement>(null)
 
   const columns = COLUMNS_BY_SIZE[bigPictureCardSize]
+  const cardWidth = CARD_SIZES[bigPictureCardSize].width
+  // Add small buffer for scale effect (5% scale = ~8-12px depending on card size)
+  const minColumnWidth = cardWidth + 12
 
   // Reset focus when games change
   useEffect(() => {
@@ -169,7 +179,7 @@ export default function BPGameGrid({
       ref={gridRef}
       className="grid gap-4 p-8 overflow-auto h-full"
       style={{
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gridTemplateColumns: `repeat(${columns}, minmax(${minColumnWidth}px, 1fr))`,
         justifyItems: 'center'
       }}
     >

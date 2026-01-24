@@ -171,9 +171,10 @@ ipcMain.handle('window:isMaximized', () => {
 })
 
 // Dialog handlers
-ipcMain.handle('dialog:openDirectory', async () => {
+ipcMain.handle('dialog:openDirectory', async (_event, defaultPath?: string) => {
   const result = await dialog.showOpenDialog(mainWindow!, {
-    properties: ['openDirectory']
+    properties: ['openDirectory'],
+    defaultPath: defaultPath
   })
   return result.canceled ? null : result.filePaths[0]
 })

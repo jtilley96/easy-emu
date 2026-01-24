@@ -10,8 +10,6 @@ import KeyboardShortcutsSection from './KeyboardShortcutsSection'
 export default function ControllersSettings() {
   const { gamepads } = useGamepad()
   const {
-    isBigPictureMode,
-    setBigPictureMode,
     bigPictureOnStartup,
     setBigPictureOnStartup,
     bigPictureCardSize,
@@ -179,21 +177,6 @@ export default function ControllersSettings() {
         </h3>
 
         <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isBigPictureMode}
-              onChange={(e) => setBigPictureMode(e.target.checked)}
-              className="w-4 h-4 accent-accent"
-            />
-            <div>
-              <span className="font-medium">Enable Big Picture Mode</span>
-              <p className="text-surface-400 text-sm">
-                Switch to a controller-friendly 10-foot interface
-              </p>
-            </div>
-          </label>
-
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"

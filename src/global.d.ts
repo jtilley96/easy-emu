@@ -142,7 +142,7 @@ declare global {
       onMaximizeChange: (callback: (isMaximized: boolean) => void) => void
     }
     dialog: {
-      openDirectory: () => Promise<string | null>
+      openDirectory: (defaultPath?: string) => Promise<string | null>
       openFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
     }
     shell: {

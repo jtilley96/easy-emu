@@ -107,7 +107,8 @@ function LibrarySettings() {
   const { addToast } = useUIStore()
 
   const handleAddFolder = async () => {
-    const path = await window.electronAPI.dialog.openDirectory()
+    const defaultPath = romFolders.length > 0 ? romFolders[romFolders.length - 1] : undefined
+    const path = await window.electronAPI.dialog.openDirectory(defaultPath)
     if (path) {
       addRomFolder(path)
       addToast('success', `Added folder: ${path}`)
@@ -567,7 +568,8 @@ function PathsSettings() {
   }, [])
 
   const handleBrowse = async (key: keyof typeof paths) => {
-    const path = await window.electronAPI.dialog.openDirectory()
+    const currentPath = paths[key] || undefined
+    const path = await window.electronAPI.dialog.openDirectory(currentPath)
     if (path) {
       await window.electronAPI.config.set(key, path)
       setPaths(prev => ({ ...prev, [key]: path }))
