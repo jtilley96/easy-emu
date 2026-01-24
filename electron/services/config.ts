@@ -39,6 +39,7 @@ function getDefaultConfig(): AppConfig {
     statesPath: path.join(userData, 'states'),
     screenshotsPath: path.join(userData, 'screenshots'),
     coversPath: path.join(userData, 'covers'),
+    autoScrape: false,
     startMinimized: false,
     checkUpdates: true
   }

@@ -67,3 +67,18 @@ export interface ScanProgress {
   scanned: number
   current: string
 }
+
+export interface ScrapeResult {
+  gameId: string
+  success: boolean
+  error?: string
+  matched: boolean
+  title?: string
+}
+
+export interface ScrapeProgress {
+  current: number
+  total: number
+  currentGame: string
+  gameId: string
+}

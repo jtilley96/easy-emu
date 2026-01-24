@@ -68,7 +68,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Metadata operations
   metadata: {
     update: (gameId: string, metadata: Record<string, unknown>) =>
-      ipcRenderer.invoke('metadata:update', gameId, metadata)
+      ipcRenderer.invoke('metadata:update', gameId, metadata),
+    scrapeGame: (gameId: string) =>
+      ipcRenderer.invoke('hasheous:scrapeGame', gameId),
+    scrapeGames: (gameIds: string[]) =>
+      ipcRenderer.invoke('hasheous:scrapeGames', gameIds),
+    scrapeAllGames: () =>
+      ipcRenderer.invoke('hasheous:scrapeAllGames'),
+    cancelScrape: () =>
+      ipcRenderer.invoke('hasheous:cancelScrape'),
+    onScrapeProgress: (callback: (progress: ScrapeProgress) => void) => {
+      const fn = (_: unknown, progress: ScrapeProgress) => callback(progress)
+      ipcRenderer.on('hasheous:scrapeProgress', fn)
+      return () => ipcRenderer.removeListener('hasheous:scrapeProgress', fn)
+    }
   },
 
   // Config operations
@@ -128,6 +141,11 @@ export interface ElectronAPI {
   }
   metadata: {
     update: (gameId: string, metadata: Partial<GameMetadata>) => Promise<void>
+    scrapeGame: (gameId: string) => Promise<ScrapeResult>
+    scrapeGames: (gameIds: string[]) => Promise<ScrapeResult[]>
+    scrapeAllGames: () => Promise<ScrapeResult[]>
+    cancelScrape: () => Promise<void>
+    onScrapeProgress: (callback: (progress: ScrapeProgress) => void) => () => void
   }
   config: {
     get: (key: string) => Promise<unknown>
@@ -190,6 +208,21 @@ interface GameMetadata {
   rating?: number
   coverUrl?: string
   screenshotUrls?: string[]
+}
+
+interface ScrapeResult {
+  gameId: string
+  success: boolean
+  error?: string
+  matched: boolean
+  title?: string
+}
+
+interface ScrapeProgress {
+  current: number
+  total: number
+  currentGame: string
+  gameId: string
 }
 
 declare global {

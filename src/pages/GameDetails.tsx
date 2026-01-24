@@ -9,7 +9,9 @@ import {
   Star,
   Edit,
   Trash2,
-  Settings2
+  Settings2,
+  Download,
+  Loader2
 } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
@@ -22,13 +24,14 @@ import ScreenshotGallery from '../components/ScreenshotGallery'
 export default function GameDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { games, launchGame, toggleFavorite, deleteGame, platformsWithEmulator, loadLibrary } = useLibraryStore()
+  const { games, launchGame, toggleFavorite, deleteGame, platformsWithEmulator, loadLibrary, scrapeGame, isScraping } = useLibraryStore()
   const { addToast } = useUIStore()
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showGameSettingsModal, setShowGameSettingsModal] = useState(false)
   const [launching, setLaunching] = useState(false)
+  const [scraping, setScraping] = useState(false)
 
   const game = games.find(g => g.id === id)
   const canPlay = game ? platformsWithEmulator.includes(game.platform) : false
@@ -69,6 +72,27 @@ export default function GameDetails() {
   const handleToggleFavorite = async () => {
     await toggleFavorite(game.id)
     addToast('success', game.isFavorite ? 'Removed from favorites' : 'Added to favorites')
+  }
+
+  const handleScrapeMetadata = async () => {
+    if (!game) return
+    setScraping(true)
+    try {
+      const result = await scrapeGame(game.id)
+      if (result.success) {
+        if (result.matched) {
+          addToast('success', `Metadata fetched for ${result.title || game.title}`)
+        } else {
+          addToast('warning', 'No match found in database. Try editing manually.')
+        }
+      } else {
+        addToast('error', result.error || 'Failed to fetch metadata')
+      }
+    } catch (error) {
+      addToast('error', (error as Error)?.message ?? 'Failed to fetch metadata')
+    } finally {
+      setScraping(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -174,6 +198,15 @@ export default function GameDetails() {
                 title={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               >
                 <Star size={20} className={game.isFavorite ? 'fill-yellow-500' : ''} />
+              </button>
+
+              <button
+                onClick={handleScrapeMetadata}
+                disabled={scraping || isScraping}
+                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg disabled:opacity-50"
+                title="Fetch metadata from Hasheous"
+              >
+                {scraping ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
               </button>
 
               <button

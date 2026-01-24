@@ -429,6 +429,37 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
     throw new Error(`No emulator found for platform: ${game.platform}. Add one in Settings → Emulators.`)
   }
 
+  // Check for RetroArch core availability
+  if (emulatorDef.id === 'retroarch') {
+    const coreName = RETROARCH_CORE_BY_PLATFORM[game.platform]
+    if (coreName) {
+      const ext = getRetroArchCoreExt()
+      const coresDir = path.join(path.dirname(emulatorPath), 'cores')
+      const corePath = path.join(coresDir, coreName + ext)
+      if (!fs.existsSync(corePath)) {
+        throw new Error(
+          `RetroArch core not found for ${game.platform}.\n\n` +
+          `Required core: ${coreName}${ext}\n\n` +
+          `To install: Open RetroArch → Online Updater → Core Downloader and install the appropriate core.`
+        )
+      }
+    }
+  }
+
+  // Check for RPCS3 firmware
+  if (emulatorDef.id === 'rpcs3') {
+    const rpcs3Dir = path.dirname(emulatorPath)
+    const devFlash = path.join(rpcs3Dir, 'dev_flash')
+    const devFlashAlt = path.join(process.env.APPDATA || '', 'rpcs3', 'dev_flash')
+    if (!fs.existsSync(devFlash) && !fs.existsSync(devFlashAlt)) {
+      throw new Error(
+        `RPCS3 firmware not installed.\n\n` +
+        `PS3 games require the official PlayStation 3 firmware to run.\n\n` +
+        `To install: Download firmware from the PlayStation website, then in RPCS3 go to File → Install Firmware.`
+      )
+    }
+  }
+
   const romPath = resolveRomPath(game)
   if (!fs.existsSync(romPath)) {
     throw new Error('ROM file not found. It may have been moved or deleted.')

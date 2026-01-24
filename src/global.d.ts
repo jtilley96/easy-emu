@@ -64,6 +64,21 @@ declare global {
     path: string | null
   }
 
+  interface ScrapeResult {
+    gameId: string
+    success: boolean
+    error?: string
+    matched: boolean
+    title?: string
+  }
+
+  interface ScrapeProgress {
+    current: number
+    total: number
+    currentGame: string
+    gameId: string
+  }
+
   interface ElectronAPI {
     window: {
       minimize: () => Promise<void>
@@ -105,6 +120,11 @@ declare global {
     }
     metadata: {
       update: (gameId: string, metadata: Partial<GameMetadata>) => Promise<void>
+      scrapeGame: (gameId: string) => Promise<ScrapeResult>
+      scrapeGames: (gameIds: string[]) => Promise<ScrapeResult[]>
+      scrapeAllGames: () => Promise<ScrapeResult[]>
+      cancelScrape: () => Promise<void>
+      onScrapeProgress: (callback: (progress: ScrapeProgress) => void) => () => void
     }
     config: {
       get: (key: string) => Promise<unknown>

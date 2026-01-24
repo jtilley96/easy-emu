@@ -40,4 +40,5 @@ data/
 *.tsbuildinfo
 
 # AI
+.claude
 claude-plan.md

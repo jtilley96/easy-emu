@@ -334,6 +334,20 @@ function EmulatorsSettings() {
         </div>
       </section>
 
+      {/* Emulator setup warnings */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-6">
+        <div className="flex gap-3">
+          <AlertCircle className="text-yellow-500 flex-shrink-0" size={20} />
+          <div>
+            <p className="text-yellow-200 font-medium mb-2">Setup Requirements</p>
+            <ul className="text-yellow-200/80 text-sm space-y-1 list-disc list-inside">
+              <li><strong>RetroArch</strong> requires cores to be installed before games can be launched. Open RetroArch → Online Updater → Core Downloader.</li>
+              <li><strong>RPCS3 (PS3)</strong> requires PlayStation 3 firmware to be installed. Download from PlayStation website and install via File → Install Firmware.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* Per-emulator cards */}
       <section>
         <h3 className="text-lg font-semibold mb-4">Emulators</h3>
@@ -609,15 +623,171 @@ function PathsSettings() {
 
 // Metadata Settings Section
 function MetadataSettings() {
+  const { games, isScraping, scrapeProgress, scrapeAllGames, cancelScrape, setScrapeProgress } = useLibraryStore()
+  const { addToast } = useUIStore()
+  const [autoScrape, setAutoScrape] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const config = await window.electronAPI.config.getAll() as Record<string, unknown>
+        setAutoScrape(config.autoScrape === true)
+      } catch (error) {
+        console.error('Failed to load metadata settings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadSettings()
+  }, [])
+
+  // Listen for scrape progress events
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.metadata.onScrapeProgress((progress) => {
+      setScrapeProgress(progress)
+    })
+    return () => unsubscribe()
+  }, [setScrapeProgress])
+
+  const handleAutoScrapeChange = async (checked: boolean) => {
+    setAutoScrape(checked)
+    await window.electronAPI.config.set('autoScrape', checked)
+    addToast('success', checked ? 'Auto-scrape enabled' : 'Auto-scrape disabled')
+  }
+
+  const handleScrapeAll = async () => {
+    if (games.length === 0) {
+      addToast('warning', 'No games in library to scrape')
+      return
+    }
+
+    try {
+      const results = await scrapeAllGames()
+      const matched = results.filter(r => r.matched).length
+      const failed = results.filter(r => !r.success).length
+
+      if (failed > 0) {
+        addToast('warning', `Scrape complete: ${matched} matched, ${failed} failed`)
+      } else if (matched === 0) {
+        addToast('info', 'Scrape complete: No matches found')
+      } else {
+        addToast('success', `Scrape complete: ${matched} games updated`)
+      }
+    } catch (error) {
+      addToast('error', (error as Error)?.message ?? 'Failed to scrape games')
+    }
+  }
+
+  const handleCancel = async () => {
+    await cancelScrape()
+    addToast('info', 'Scrape cancelled')
+  }
+
+  const progressPercent = scrapeProgress
+    ? Math.round((scrapeProgress.current / scrapeProgress.total) * 100)
+    : 0
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 size={32} className="animate-spin text-accent" />
+      </div>
+    )
+  }
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Metadata Settings</h2>
 
+      {/* Hasheous Info */}
+      <section className="mb-8">
+        <div className="bg-accent/10 border border-accent/30 rounded-lg p-4 mb-6">
+          <div className="flex gap-3">
+            <Info className="text-accent flex-shrink-0" size={20} />
+            <div>
+              <p className="text-accent font-medium mb-1">Powered by Hasheous</p>
+              <p className="text-accent/80 text-sm">
+                EasyEmu uses <a href="https://hasheous.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-accent">Hasheous</a> for
+                automatic game identification via ROM hash matching. No API key or account required.
+                Hasheous proxies IGDB metadata and supports No-Intro, TOSEC, Redump, and MAME databases.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Bulk Scrape */}
+      <section className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">Scan Library for Metadata</h3>
+        <p className="text-surface-400 mb-4">
+          Automatically fetch metadata for all games in your library. This will calculate file hashes
+          and look up game information from online databases.
+        </p>
+
+        {isScraping && scrapeProgress ? (
+          <div className="bg-surface-800 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-surface-300">
+                Scanning: {scrapeProgress.currentGame}
+              </span>
+              <span className="text-sm text-surface-400">
+                {scrapeProgress.current} / {scrapeProgress.total}
+              </span>
+            </div>
+            <div className="w-full bg-surface-700 rounded-full h-2 mb-3">
+              <div
+                className="bg-accent h-2 rounded-full transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <button
+              onClick={handleCancel}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg"
+            >
+              <XCircle size={18} />
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleScrapeAll}
+            disabled={isScraping || games.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download size={18} />
+            Scan All Games ({games.length})
+          </button>
+        )}
+      </section>
+
+      {/* Auto-scrape Toggle */}
+      <section className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">Automatic Metadata</h3>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoScrape}
+            onChange={e => handleAutoScrapeChange(e.target.checked)}
+            className="w-4 h-4 accent-accent"
+          />
+          <div>
+            <span className="font-medium">Auto-fetch metadata when scanning library</span>
+            <p className="text-surface-400 text-sm">
+              Automatically look up metadata for new games when you scan your ROM folders.
+              This may slow down the scan process.
+            </p>
+          </div>
+        </label>
+      </section>
+
+      {/* Manual Edit Info */}
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Manual Metadata Management</h3>
         <p className="text-surface-400 mb-4">
-          You can manually edit game metadata, including title, cover art, and backdrop images, 
-          by clicking the Edit button on any game's details page.
+          You can manually edit game metadata, including title, cover art, and backdrop images,
+          by clicking the Edit button on any game's details page. You can also click the download
+          icon to fetch metadata for a single game.
         </p>
       </section>
     </div>

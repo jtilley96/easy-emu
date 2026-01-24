@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Game } from '../types'
+import { Game, ScrapeResult, ScrapeProgress } from '../types'
 
 interface LibraryState {
   games: Game[]
@@ -7,6 +7,10 @@ interface LibraryState {
   isScanning: boolean
   scanProgress: { total: number; scanned: number; current: string } | null
   platformsWithEmulator: string[]
+
+  // Scraping state
+  isScraping: boolean
+  scrapeProgress: ScrapeProgress | null
 
   // Actions
   loadLibrary: () => Promise<void>
@@ -19,6 +23,12 @@ interface LibraryState {
   toggleFavorite: (gameId: string) => Promise<void>
   deleteGame: (gameId: string) => Promise<void>
   handlePlaySessionEnded: (gameId: string, durationMinutes: number) => void
+
+  // Scraping actions
+  scrapeGame: (gameId: string) => Promise<ScrapeResult>
+  scrapeAllGames: () => Promise<ScrapeResult[]>
+  cancelScrape: () => Promise<void>
+  setScrapeProgress: (progress: ScrapeProgress | null) => void
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -27,6 +37,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   isScanning: false,
   scanProgress: null,
   platformsWithEmulator: [],
+  isScraping: false,
+  scrapeProgress: null,
 
   loadLibrary: async () => {
     try {
@@ -148,5 +160,50 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           : g
       )
     }))
+  },
+
+  scrapeGame: async (gameId: string) => {
+    set({ isScraping: true })
+    try {
+      const result = await window.electronAPI.metadata.scrapeGame(gameId)
+
+      // Reload the specific game to get updated metadata
+      if (result.success && result.matched) {
+        const updatedGame = await window.electronAPI.library.getGame(gameId)
+        if (updatedGame) {
+          set(state => ({
+            games: state.games.map(g => g.id === gameId ? updatedGame : g)
+          }))
+        }
+      }
+
+      return result
+    } finally {
+      set({ isScraping: false, scrapeProgress: null })
+    }
+  },
+
+  scrapeAllGames: async () => {
+    set({ isScraping: true, scrapeProgress: null })
+    try {
+      const results = await window.electronAPI.metadata.scrapeAllGames()
+
+      // Reload all games to get updated metadata
+      const games = await window.electronAPI.library.getGames()
+      set({ games })
+
+      return results
+    } finally {
+      set({ isScraping: false, scrapeProgress: null })
+    }
+  },
+
+  cancelScrape: async () => {
+    await window.electronAPI.metadata.cancelScrape()
+    set({ isScraping: false, scrapeProgress: null })
+  },
+
+  setScrapeProgress: (progress: ScrapeProgress | null) => {
+    set({ scrapeProgress: progress })
   }
 }))
