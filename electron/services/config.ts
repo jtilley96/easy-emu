@@ -11,10 +11,7 @@ export interface AppConfig {
   statesPath: string
   screenshotsPath: string
   coversPath: string
-  preferredRegion: 'us' | 'eu' | 'jp' | 'wor'
   autoScrape: boolean
-  screenScraperUsername?: string
-  screenScraperPassword?: string
   startMinimized: boolean
   checkUpdates: boolean
 }
@@ -38,8 +35,6 @@ function getDefaultConfig(): AppConfig {
     statesPath: path.join(userData, 'states'),
     screenshotsPath: path.join(userData, 'screenshots'),
     coversPath: path.join(userData, 'covers'),
-    preferredRegion: 'us',
-    autoScrape: true,
     startMinimized: false,
     checkUpdates: true
   }

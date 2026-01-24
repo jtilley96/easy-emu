@@ -470,146 +470,16 @@ function PathsSettings() {
 
 // Metadata Settings Section
 function MetadataSettings() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [preferredRegion, setPreferredRegion] = useState('us')
-  const [autoScrape, setAutoScrape] = useState(true)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const { addToast } = useUIStore()
-
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const config = await window.electronAPI.config.getAll() as Record<string, unknown>
-        setUsername((config.screenScraperUsername as string) || '')
-        setPassword((config.screenScraperPassword as string) || '')
-        setPreferredRegion((config.preferredRegion as string) || 'us')
-        setAutoScrape(config.autoScrape !== false)
-      } catch (error) {
-        console.error('Failed to load metadata settings:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-    loadSettings()
-  }, [])
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      await window.electronAPI.config.set('screenScraperUsername', username)
-      await window.electronAPI.config.set('screenScraperPassword', password)
-      await window.electronAPI.config.set('preferredRegion', preferredRegion)
-      await window.electronAPI.config.set('autoScrape', autoScrape)
-      addToast('success', 'Metadata settings saved')
-    } catch (error) {
-      console.error('Failed to save settings:', error)
-      addToast('error', 'Failed to save settings')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleClearCache = async () => {
-    try {
-      const coversPath = await window.electronAPI.config.get('coversPath') as string
-      if (coversPath) {
-        await window.electronAPI.shell.openPath(coversPath)
-        addToast('info', 'Opened covers folder - delete files manually to clear cache')
-      }
-    } catch (error) {
-      addToast('error', 'Failed to open covers folder')
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 size={32} className="animate-spin text-accent" />
-      </div>
-    )
-  }
-
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Metadata Settings</h2>
 
       <section className="mb-8">
-        <h3 className="text-lg font-semibold mb-4">ScreenScraper Credentials</h3>
+        <h3 className="text-lg font-semibold mb-4">Manual Metadata Management</h3>
         <p className="text-surface-400 mb-4">
-          Optional: Enter your ScreenScraper credentials for faster scraping (free account available).
+          You can manually edit game metadata, including title, cover art, and backdrop images, 
+          by clicking the Edit button on any game's details page.
         </p>
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Username</label>
-            <input
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              className="w-full bg-surface-800 border border-surface-700 rounded px-3 py-2"
-              placeholder="Username"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              className="w-full bg-surface-800 border border-surface-700 rounded px-3 py-2"
-              placeholder="Password"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="mb-8">
-        <h3 className="text-lg font-semibold mb-4">Preferences</h3>
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">Preferred Region</label>
-          <select
-            value={preferredRegion}
-            onChange={e => setPreferredRegion(e.target.value)}
-            className="bg-surface-800 border border-surface-700 rounded px-3 py-2"
-          >
-            <option value="us">United States (US)</option>
-            <option value="eu">Europe (EU)</option>
-            <option value="jp">Japan (JP)</option>
-            <option value="wor">World</option>
-          </select>
-        </div>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={autoScrape}
-            onChange={e => setAutoScrape(e.target.checked)}
-            className="w-4 h-4 accent-accent"
-          />
-          <span>Auto-scrape metadata when adding games</span>
-        </label>
-      </section>
-
-      <section className="mb-8">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save Settings'}
-        </button>
-      </section>
-
-      <section>
-        <h3 className="text-lg font-semibold mb-4">Actions</h3>
-        <div className="flex gap-3">
-          <button
-            onClick={handleClearCache}
-            className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg"
-          >
-            Clear Metadata Cache
-          </button>
-        </div>
       </section>
     </div>
   )

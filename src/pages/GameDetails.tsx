@@ -8,22 +8,23 @@ import {
   Folder,
   Star,
   Edit,
-  RefreshCw,
-  Trash2,
-  Loader2
+  Trash2
 } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import { formatPlayTime, formatDate } from '../utils/format'
+import { pathToLocalImageUrl } from '../utils/image'
+import EditMetadataModal from '../components/EditMetadataModal'
+import ScreenshotGallery from '../components/ScreenshotGallery'
 
 export default function GameDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { games, launchGame, toggleFavorite, loadLibrary, deleteGame } = useLibraryStore()
+  const { games, launchGame, toggleFavorite, deleteGame } = useLibraryStore()
   const { addToast } = useUIStore()
-  const [isScraping, setIsScraping] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const game = games.find(g => g.id === id)
 
@@ -49,23 +50,6 @@ export default function GameDetails() {
     }
   }
 
-  const handleScrape = async () => {
-    setIsScraping(true)
-    try {
-      const result = await window.electronAPI.metadata.scrape(game.id)
-      if (result) {
-        await loadLibrary()
-        addToast('success', 'Metadata updated successfully')
-      } else {
-        addToast('warning', 'No metadata found for this game')
-      }
-    } catch (error) {
-      addToast('error', 'Failed to scrape metadata')
-    } finally {
-      setIsScraping(false)
-    }
-  }
-
   const handleToggleFavorite = async () => {
     await toggleFavorite(game.id)
     addToast('success', game.isFavorite ? 'Removed from favorites' : 'Added to favorites')
@@ -88,12 +72,12 @@ export default function GameDetails() {
   return (
     <div className="h-full overflow-auto">
       {/* Hero Section */}
-      <div className="relative h-64 bg-gradient-to-b from-surface-800 to-surface-900">
+      <div className="relative h-64 bg-gradient-to-b from-surface-800 to-surface-900 overflow-hidden">
         {game.backdropPath && (
           <img
-            src={game.backdropPath}
+            src={pathToLocalImageUrl(game.backdropPath)}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover opacity-30"
+            className="absolute inset-0 w-full h-full object-cover object-center opacity-30"
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-surface-950 via-transparent to-transparent" />
@@ -116,9 +100,9 @@ export default function GameDetails() {
             <div className="w-48 h-64 bg-surface-800 rounded-lg overflow-hidden shadow-xl">
               {game.coverPath ? (
                 <img
-                  src={game.coverPath}
+                  src={pathToLocalImageUrl(game.coverPath)}
                   alt={game.title}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-center"
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-surface-500">
@@ -173,20 +157,7 @@ export default function GameDetails() {
               </button>
 
               <button
-                onClick={handleScrape}
-                disabled={isScraping}
-                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg disabled:opacity-50"
-                title="Re-scrape metadata"
-              >
-                {isScraping ? (
-                  <Loader2 size={20} className="animate-spin" />
-                ) : (
-                  <RefreshCw size={20} />
-                )}
-              </button>
-
-              <button
-                onClick={() => addToast('info', 'Edit metadata coming soon')}
+                onClick={() => setShowEditModal(true)}
                 className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg"
                 title="Edit metadata"
               >
@@ -271,6 +242,11 @@ export default function GameDetails() {
               </div>
             )}
 
+            {/* Screenshots */}
+            {game.screenshotPaths && game.screenshotPaths.length > 0 && (
+              <ScreenshotGallery screenshots={game.screenshotPaths} />
+            )}
+
             {/* File info */}
             <div className="mt-8 p-4 bg-surface-800/50 rounded-lg">
               <div className="flex items-center gap-2 text-surface-400 text-sm">
@@ -287,6 +263,15 @@ export default function GameDetails() {
           </div>
         </div>
       </div>
+
+      {/* Edit Metadata Modal */}
+      {game && (
+        <EditMetadataModal
+          game={game}
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+        />
+      )}
     </div>
   )
 }

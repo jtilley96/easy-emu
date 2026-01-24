@@ -8,8 +8,18 @@ declare global {
     platform: string
     path: string
     coverPath?: string
-    lastPlayed?: string
+    backdropPath?: string
+    screenshotPaths?: string[]
+    description?: string
+    developer?: string
+    publisher?: string
+    releaseDate?: string
+    genres?: string[]
+    rating?: number
     playTime?: number
+    lastPlayed?: string
+    addedAt?: string
+    isFavorite?: boolean
   }
 
   interface EmulatorInfo {
@@ -89,8 +99,6 @@ declare global {
       configure: (emulatorId: string, config: Record<string, unknown>) => Promise<void>
     }
     metadata: {
-      scrape: (gameId: string) => Promise<GameMetadata>
-      scrapeAll: () => Promise<void>
       update: (gameId: string, metadata: Partial<GameMetadata>) => Promise<void>
     }
     config: {

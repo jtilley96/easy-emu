@@ -58,8 +58,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Metadata operations
   metadata: {
-    scrape: (gameId: string) => ipcRenderer.invoke('metadata:scrape', gameId),
-    scrapeAll: () => ipcRenderer.invoke('metadata:scrapeAll'),
     update: (gameId: string, metadata: Record<string, unknown>) =>
       ipcRenderer.invoke('metadata:update', gameId, metadata)
   },
@@ -116,8 +114,6 @@ export interface ElectronAPI {
     configure: (emulatorId: string, config: Record<string, unknown>) => Promise<void>
   }
   metadata: {
-    scrape: (gameId: string) => Promise<GameMetadata>
-    scrapeAll: () => Promise<void>
     update: (gameId: string, metadata: Partial<GameMetadata>) => Promise<void>
   }
   config: {

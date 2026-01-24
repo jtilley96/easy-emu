@@ -1,10 +1,11 @@
 import { registerConfigHandlers, loadConfig } from './config'
+import { BrowserWindow } from 'electron'
 import { registerLibraryHandlers, initDatabase } from './library'
 import { registerEmulatorHandlers } from './emulators'
 import { registerMetadataHandlers } from './metadata'
 import { registerBiosHandlers } from './bios'
 
-export function initializeServices(): void {
+export function initializeServices(mainWindow?: BrowserWindow | null): void {
   // Load configuration first
   loadConfig()
 
@@ -22,4 +23,3 @@ export function initializeServices(): void {
 export { loadConfig, getConfigValue, setConfigValue } from './config'
 export { getGames, getGame, updateGame, scanFolders } from './library'
 export { detectAllEmulators, launchGame } from './emulators'
-export { scrapeGame } from './metadata'

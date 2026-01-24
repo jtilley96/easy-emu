@@ -2,6 +2,8 @@ import { app, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
+import { scrapeGame } from './metadata'
+import { getConfigValue } from './config'
 
 export interface GameRecord {
   id: string
@@ -10,6 +12,7 @@ export interface GameRecord {
   path: string
   coverPath?: string
   backdropPath?: string
+  screenshotPaths?: string[]
   description?: string
   developer?: string
   publisher?: string
@@ -158,15 +161,17 @@ export async function scanFolders(folders: string[]): Promise<void> {
   }
 
   const now = new Date().toISOString()
+  const newGameIds: string[] = []
 
   for (const filePath of allFiles) {
     if (existingPaths.has(filePath)) continue
 
     const title = getTitleFromFilename(filePath)
     const platform = detectPlatformFromPath(filePath)
+    const gameId = uuidv4()
 
     libraryData.games.push({
-      id: uuidv4(),
+      id: gameId,
       title,
       platform,
       path: filePath,
@@ -174,6 +179,8 @@ export async function scanFolders(folders: string[]): Promise<void> {
       isFavorite: false,
       playTime: 0
     })
+
+    newGameIds.push(gameId)
   }
 
   saveLibrary()

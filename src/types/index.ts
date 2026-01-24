@@ -5,6 +5,7 @@ export interface Game {
   path: string
   coverPath?: string
   backdropPath?: string
+  screenshotPaths?: string[]
   description?: string
   developer?: string
   publisher?: string
@@ -55,10 +56,7 @@ export interface AppConfig {
   statesPath: string
   screenshotsPath: string
   coversPath: string
-  preferredRegion: 'us' | 'eu' | 'jp' | 'wor'
   autoScrape: boolean
-  screenScraperUsername?: string
-  screenScraperPassword?: string
   startMinimized: boolean
   checkUpdates: boolean
 }

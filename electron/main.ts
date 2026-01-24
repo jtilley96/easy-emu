@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { initializeServices } from './services/index'
 
@@ -8,6 +9,19 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 let mainWindow: BrowserWindow | null = null
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+
+// Register local-image scheme before app ready (required for custom protocols)
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'local-image',
+    privileges: {
+      bypassCSP: true,
+      standard: true,
+      secure: true,
+      supportFetchAPI: true
+    }
+  }
+])
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -44,15 +58,39 @@ function createWindow() {
 }
 
 // App lifecycle
-app.whenReady().then(() => {
-  // Initialize all services (config, library, emulators, metadata)
-  initializeServices()
+app.whenReady().then(async () => {
+  // Register local-image protocol to serve local image files (cover, backdrop, screenshots)
+  protocol.handle('local-image', (request) => {
+    try {
+      const u = new URL(request.url)
+      const encoded = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname
+      const filePath = decodeURIComponent(encoded)
+      const ext = path.extname(filePath).toLowerCase()
+      const mime: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webp': 'image/webp',
+        '.gif': 'image/gif'
+      }
+      const contentType = mime[ext] ?? 'application/octet-stream'
+      const buffer = fs.readFileSync(filePath)
+      return new Response(buffer, { headers: { 'Content-Type': contentType } })
+    } catch (err) {
+      console.error('local-image protocol error:', err)
+      return new Response(null, { status: 404 })
+    }
+  })
 
   createWindow()
+
+  // Initialize all services (config, library, emulators, metadata)
+  initializeServices(mainWindow)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
+      initializeServices(mainWindow)
     }
   })
 })

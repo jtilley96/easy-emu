@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Play, Star, Clock } from 'lucide-react'
 import { Game } from '../types'
 import { formatPlayTime } from '../utils/format'
+import { pathToLocalImageUrl } from '../utils/image'
 import { useLibraryStore } from '../store/libraryStore'
 
 interface GameCardProps {
@@ -34,9 +35,9 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
         <div className="w-16 h-16 bg-surface-700 rounded overflow-hidden flex-shrink-0">
           {game.coverPath ? (
             <img
-              src={game.coverPath}
+              src={pathToLocalImageUrl(game.coverPath)}
               alt={game.title}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover object-center"
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-surface-500 text-xs">
@@ -99,12 +100,12 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
       className="game-card group relative bg-surface-800 rounded-lg overflow-hidden"
     >
       {/* Cover art */}
-      <div className="aspect-[3/4] bg-surface-700 relative">
+      <div className="aspect-[3/4] bg-surface-700 relative overflow-hidden">
         {game.coverPath ? (
           <img
-            src={game.coverPath}
+            src={pathToLocalImageUrl(game.coverPath)}
             alt={game.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover object-center"
             loading="lazy"
           />
         ) : (
