@@ -495,10 +495,12 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
         const existing = g.playTime ?? 0
         updateGame(gameId, { playTime: existing + durationMinutes })
       }
-      mainWindowRef?.webContents?.send('emulators:playSessionEnded', {
-        gameId,
-        durationMinutes
-      })
+      if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+        mainWindowRef.webContents.send('emulators:playSessionEnded', {
+          gameId,
+          durationMinutes
+        })
+      }
       child.unref()
     })
   })

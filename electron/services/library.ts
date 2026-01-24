@@ -2,6 +2,7 @@ import { app, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { v4 as uuidv4 } from 'uuid'
+import { scrapeGame } from './hasheous'
 import { getConfigValue } from './config'
 
 export interface GameRecord {
@@ -118,7 +119,7 @@ const PLATFORM_HINTS: { platform: string; hints: string[] }[] = [
   { platform: 'genesis', hints: ['genesis', 'megadrive', 'mega drive', 'sega genesis'] },
   { platform: 'snes', hints: ['snes', 'super nintendo', 'super famicom', 'sfc'] },
   { platform: 'nes', hints: ['nes', 'nintendo entertainment', 'famicom'] },
-  { platform: 'n64', hints: ['n64', 'nintendo 64', 'n64'] },
+  { platform: 'n64', hints: ['n64', 'nintendo 64'] },
   { platform: 'arcade', hints: ['arcade', 'mame', 'fbneo'] }
 ]
 
@@ -131,34 +132,21 @@ function detectPlatformFromPath(filePath: string): string {
   }
 
   const lowerPath = filePath.toLowerCase().replace(/\\/g, '/')
-  const pathSegments = lowerPath.split('/').filter(Boolean)
+  const pathSegments = lowerPath.split('/')
   const filenameNoExt = path.basename(filePath, path.extname(filePath)).toLowerCase()
 
-  const segmentMatchesHint = (segment: string, hint: string): boolean => {
-    if (hint.length <= 2) {
-      const tokens = segment.split(/[^a-z0-9]+/).filter(Boolean)
-      return tokens.some(token => token === hint)
-    }
-    return segment.includes(hint)
-  }
-
-  // Check folders first (nearest to farthest), then filename.
-  const foldersToCheck = pathSegments.slice(0, -1).reverse()
+  // Check: filename (e.g. "Game (PS3).iso"), parent folder, grandparent, then full path.
+  const foldersToCheck: string[] = [filenameNoExt]
+  if (pathSegments.length >= 2) foldersToCheck.push(pathSegments[pathSegments.length - 2])
+  if (pathSegments.length >= 3) foldersToCheck.push(pathSegments[pathSegments.length - 3])
+  foldersToCheck.push(lowerPath)
 
   for (const segment of foldersToCheck) {
     for (const { platform: platformId, hints } of PLATFORM_HINTS) {
       for (const hint of hints) {
-        if (segmentMatchesHint(segment, hint)) {
+        if (segment.includes(hint)) {
           return platformId
         }
-      }
-    }
-  }
-
-  for (const { platform: platformId, hints } of PLATFORM_HINTS) {
-    for (const hint of hints) {
-      if (segmentMatchesHint(filenameNoExt, hint)) {
-        return platformId
       }
     }
   }
@@ -226,6 +214,28 @@ export async function scanFolders(folders: string[]): Promise<void> {
   }
 
   saveLibrary()
+
+  // Auto-scrape metadata for new games if enabled
+  const autoScrape = getConfigValue('autoScrape')
+  if (autoScrape && newGameIds.length > 0) {
+    console.log(`Auto-scraping metadata for ${newGameIds.length} new game(s)...`)
+    // Scrape asynchronously to avoid blocking the scan operation
+    // Use a small delay between requests to be nice to the API
+    for (let i = 0; i < newGameIds.length; i++) {
+      const gameId = newGameIds[i]
+      try {
+        await scrapeGame(gameId)
+        // Small delay between requests (except for the last one)
+        if (i < newGameIds.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      } catch (error) {
+        console.error(`Failed to auto-scrape game ${gameId}:`, error)
+        // Continue with other games even if one fails
+      }
+    }
+    console.log(`Auto-scrape complete for ${newGameIds.length} game(s)`)
+  }
 }
 
 export function getGames(): GameRecord[] {
