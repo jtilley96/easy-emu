@@ -15,8 +15,11 @@ import {
   Check,
   X,
   AlertCircle,
-  Loader2
+  Loader2,
+  Settings2,
+  XCircle
 } from 'lucide-react'
+import { PLATFORMS } from '../constants/platforms'
 import { useAppStore } from '../store/appStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
@@ -172,7 +175,11 @@ function LibrarySettings() {
 function EmulatorsSettings() {
   const [emulators, setEmulators] = useState<EmulatorInfo[]>([])
   const [loading, setLoading] = useState(true)
+  const [versionCache, setVersionCache] = useState<Record<string, string>>({})
+  const [defaults, setDefaults] = useState<Record<string, string>>({})
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({})
   const { addToast } = useUIStore()
+  const refreshPlatformsWithEmulator = useLibraryStore(s => s.refreshPlatformsWithEmulator)
 
   const loadEmulators = async () => {
     setLoading(true)
@@ -187,9 +194,29 @@ function EmulatorsSettings() {
     }
   }
 
+  const loadConfig = async () => {
+    try {
+      const config = (await window.electronAPI.config.getAll()) as Record<string, unknown>
+      setDefaults((config.defaultEmulatorPerPlatform as Record<string, string>) || {})
+      setEnabled((config.emulatorEnabled as Record<string, boolean>) || {})
+    } catch (e) {
+      console.error('Failed to load config', e)
+    }
+  }
+
   useEffect(() => {
     loadEmulators()
+    loadConfig()
   }, [])
+
+  useEffect(() => {
+    emulators.filter(e => e.installed).forEach(emu => {
+      if (versionCache[emu.id] !== undefined) return
+      window.electronAPI.emulators.getVersion(emu.id).then(v => {
+        setVersionCache(prev => ({ ...prev, [emu.id]: v }))
+      })
+    })
+  }, [emulators, versionCache])
 
   const handleBrowse = async (emulatorId: string) => {
     const path = await window.electronAPI.dialog.openFile([
@@ -198,84 +225,196 @@ function EmulatorsSettings() {
     if (path) {
       await window.electronAPI.emulators.configure(emulatorId, { path })
       await loadEmulators()
+      await refreshPlatformsWithEmulator()
+      setVersionCache(prev => {
+        const next = { ...prev }
+        delete next[emulatorId]
+        return next
+      })
       addToast('success', 'Emulator path updated')
     }
   }
 
-  const handleDownload = async (url: string) => {
-    await window.electronAPI.shell.openExternal(url)
+  const handleClear = async (emulatorId: string) => {
+    await window.electronAPI.emulators.configure(emulatorId, { clear: true })
+    await loadEmulators()
+    await refreshPlatformsWithEmulator()
+    setVersionCache(prev => {
+      const next = { ...prev }
+      delete next[emulatorId]
+      return next
+    })
+    addToast('success', 'Path cleared')
+  }
+
+  const handleDownload = (url: string) => {
+    window.electronAPI.shell.openExternal(url)
+  }
+
+  const handleEnabledChange = async (emulatorId: string, value: boolean) => {
+    const next = { ...enabled, [emulatorId]: value }
+    setEnabled(next)
+    await window.electronAPI.config.set('emulatorEnabled', next)
+    await refreshPlatformsWithEmulator()
+    addToast('success', value ? 'Emulator enabled' : 'Emulator disabled')
+  }
+
+  const handleOpenSettings = async (emulatorId: string) => {
+    try {
+      await window.electronAPI.emulators.openSettings(emulatorId)
+    } catch (e) {
+      addToast('error', 'Failed to open emulator settings')
+    }
+  }
+
+  const handleDefaultChange = async (platformId: string, emulatorId: string) => {
+    const value = emulatorId === '' ? undefined : emulatorId
+    const next = value ? { ...defaults, [platformId]: value } : (() => {
+      const o = { ...defaults }
+      delete o[platformId]
+      return o
+    })()
+    setDefaults(next)
+    await window.electronAPI.config.set('defaultEmulatorPerPlatform', next)
+    addToast('success', 'Default emulator updated')
   }
 
   const getPlatformNames = (platforms: string[]): string => {
-    const names: Record<string, string> = {
-      nes: 'NES', snes: 'SNES', n64: 'N64', gb: 'Game Boy', gbc: 'GBC', gba: 'GBA',
-      nds: 'NDS', gamecube: 'GameCube', wii: 'Wii', switch: 'Switch', genesis: 'Genesis',
-      ps1: 'PS1', ps2: 'PS2', ps3: 'PS3', psp: 'PSP', arcade: 'Arcade'
-    }
-    return platforms.map(p => names[p] || p).join(', ')
+    return platforms.map(p => PLATFORMS.find(x => x.id === p)?.shortName ?? p).join(', ')
   }
+
+  const installedForPlatform = (platformId: string) =>
+    emulators.filter(
+      e => e.installed && (enabled[e.id] !== false) && e.platforms.includes(platformId)
+    )
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Emulator Settings</h2>
         <button
-          onClick={loadEmulators}
+          onClick={async () => {
+            await loadEmulators()
+            loadConfig()
+            await refreshPlatformsWithEmulator()
+          }}
           disabled={loading}
           className="flex items-center gap-2 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
         >
-          <RefreshCw size={16} className={loading ? 'spinner' : ''} />
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           Re-detect All
         </button>
       </div>
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={32} className="animate-spin text-accent" />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {emulators.map(emu => (
-            <div key={emu.id} className="bg-surface-800 rounded-lg p-4">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-lg">{emu.name}</h3>
-                  <p className="text-surface-400 text-sm">{getPlatformNames(emu.platforms)}</p>
-                </div>
-                <span className={`flex items-center gap-1 text-sm ${
-                  emu.installed ? 'text-green-400' : 'text-surface-400'
-                }`}>
-                  {emu.installed ? <Check size={16} /> : <X size={16} />}
-                  {emu.installed ? 'Installed' : 'Not Installed'}
-                </span>
-              </div>
-
-              {emu.path && (
-                <div className="flex items-center gap-2 text-sm text-surface-400 mb-3">
-                  <span className="font-mono truncate">{emu.path}</span>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleBrowse(emu.id)}
-                  className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+      {/* Default emulator per platform */}
+      <section className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">Default emulator per platform</h3>
+        <p className="text-surface-400 text-sm mb-4">
+          Choose which emulator to use for each platform when a game has no specific override.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {PLATFORMS.map(p => {
+            const options = installedForPlatform(p.id)
+            return (
+              <div key={p.id} className="bg-surface-800 rounded-lg px-4 py-3">
+                <label className="block text-sm font-medium mb-1">{p.shortName}</label>
+                <select
+                  value={defaults[p.id] ?? ''}
+                  onChange={e => handleDefaultChange(p.id, e.target.value)}
+                  className="w-full bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm"
                 >
-                  Browse
-                </button>
-                {!emu.installed && emu.downloadUrl && (
-                  <button
-                    onClick={() => handleDownload(emu.downloadUrl!)}
-                    className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded text-sm"
-                  >
-                    Download
-                  </button>
-                )}
+                  <option value="">Default (first installed)</option>
+                  {options.map(emu => (
+                    <option key={emu.id} value={emu.id}>{emu.name}</option>
+                  ))}
+                </select>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-      )}
+      </section>
+
+      {/* Per-emulator cards */}
+      <section>
+        <h3 className="text-lg font-semibold mb-4">Emulators</h3>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={32} className="animate-spin text-accent" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {emulators.map(emu => (
+              <div key={emu.id} className="bg-surface-800 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-semibold text-lg">{emu.name}</h4>
+                    <p className="text-surface-400 text-sm">{getPlatformNames(emu.platforms)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={enabled[emu.id] !== false}
+                        onChange={e => handleEnabledChange(emu.id, e.target.checked)}
+                        className="w-4 h-4 accent-accent"
+                      />
+                      <span>Enabled</span>
+                    </label>
+                    <span className={`flex items-center gap-1 text-sm ${emu.installed ? 'text-green-400' : 'text-surface-400'}`}>
+                      {emu.installed ? <Check size={16} /> : <X size={16} />}
+                      {emu.installed ? 'Installed' : 'Not Installed'}
+                    </span>
+                  </div>
+                </div>
+
+                {emu.path && (
+                  <div className="flex items-center gap-2 text-sm text-surface-400 mb-2">
+                    <span className="font-mono truncate flex-1">{emu.path}</span>
+                    {versionCache[emu.id] !== undefined && (
+                      <span className="text-surface-500">Version: {versionCache[emu.id]}</span>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handleBrowse(emu.id)}
+                    className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+                  >
+                    Browse
+                  </button>
+                  {emu.path && (
+                    <button
+                      onClick={() => handleClear(emu.id)}
+                      className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm flex items-center gap-1"
+                    >
+                      <XCircle size={14} />
+                      Clear
+                    </button>
+                  )}
+                  {emu.installed && (
+                    <button
+                      onClick={() => handleOpenSettings(emu.id)}
+                      className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm flex items-center gap-1"
+                    >
+                      <Settings2 size={14} />
+                      Open {emu.name} Settings
+                    </button>
+                  )}
+                  {!emu.installed && emu.downloadUrl && (
+                    <button
+                      onClick={() => handleDownload(emu.downloadUrl!)}
+                      className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded text-sm"
+                    >
+                      Download
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }
@@ -470,9 +609,130 @@ function PathsSettings() {
 
 // Metadata Settings Section
 function MetadataSettings() {
+  const { addToast } = useUIStore()
+  const { scrapeAllGames, cancelScrape, isScraping, scrapeProgress, games, loadLibrary } = useLibraryStore()
+  const [autoScrape, setAutoScrape] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const config = await window.electronAPI.config.getAll() as Record<string, unknown>
+        setAutoScrape(config.autoScrape === true)
+      } catch (error) {
+        console.error('Failed to load metadata settings:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadSettings()
+  }, [])
+
+  const handleAutoScrapeChange = async (checked: boolean) => {
+    setAutoScrape(checked)
+    await window.electronAPI.config.set('autoScrape', checked)
+    addToast('success', checked ? 'Auto-scrape enabled' : 'Auto-scrape disabled')
+  }
+
+  const handleScrapeAll = async () => {
+    try {
+      const results = await scrapeAllGames()
+      const successCount = results.filter(r => r.success && r.matched).length
+      await loadLibrary()
+      addToast('success', `Scraped ${successCount} of ${results.length} games`)
+    } catch (error) {
+      console.error('Failed to scrape all games:', error)
+      addToast('error', 'Failed to scrape all games')
+    }
+  }
+
+  const handleCancelScrape = async () => {
+    await cancelScrape()
+    addToast('info', 'Scraping cancelled')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 size={32} className="animate-spin text-accent" />
+      </div>
+    )
+  }
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Metadata Settings</h2>
+
+      <section className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">Automatic Metadata Lookup</h3>
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoScrape}
+            onChange={e => handleAutoScrapeChange(e.target.checked)}
+            className="w-4 h-4 accent-accent"
+          />
+          <div>
+            <span className="font-medium">Automatically look up metadata for new games when you scan your ROM folders</span>
+            <p className="text-surface-400 text-sm mt-1">
+              When enabled, EasyEmu will automatically fetch game metadata (title, cover art, description, etc.) from Hasheous for newly scanned games.
+            </p>
+          </div>
+        </label>
+      </section>
+
+      <section className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">Bulk Metadata Scraping</h3>
+        <p className="text-surface-400 mb-4">
+          Scrape metadata for all games in your library. This will fetch titles, cover art, descriptions, and other metadata from Hasheous.
+        </p>
+        
+        {isScraping && scrapeProgress && (
+          <div className="bg-surface-800 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Scraping progress</span>
+              <span className="text-sm text-surface-400">
+                {scrapeProgress.current} / {scrapeProgress.total}
+              </span>
+            </div>
+            <div className="w-full bg-surface-900 rounded-full h-2 mb-2">
+              <div
+                className="bg-accent h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(scrapeProgress.current / scrapeProgress.total) * 100}%` }}
+              />
+            </div>
+            <p className="text-sm text-surface-400 truncate">
+              {scrapeProgress.currentGame}
+            </p>
+            <button
+              onClick={handleCancelScrape}
+              className="mt-3 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleScrapeAll}
+            disabled={isScraping || games.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isScraping ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Scraping...
+              </>
+            ) : (
+              <>
+                <Download size={18} />
+                Scrape All Games ({games.length})
+              </>
+            )}
+          </button>
+        </div>
+      </section>
 
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Manual Metadata Management</h3>

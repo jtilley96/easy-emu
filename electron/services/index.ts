@@ -1,9 +1,10 @@
 import { registerConfigHandlers, loadConfig } from './config'
 import { BrowserWindow } from 'electron'
 import { registerLibraryHandlers, initDatabase } from './library'
-import { registerEmulatorHandlers } from './emulators'
+import { registerEmulatorHandlers, setEmulatorMainWindow } from './emulators'
 import { registerMetadataHandlers } from './metadata'
 import { registerBiosHandlers } from './bios'
+import { registerHasheousHandlers, setHasheousMainWindow } from './hasheous'
 
 export function initializeServices(mainWindow?: BrowserWindow | null): void {
   // Load configuration first
@@ -18,6 +19,10 @@ export function initializeServices(mainWindow?: BrowserWindow | null): void {
   registerEmulatorHandlers()
   registerMetadataHandlers()
   registerBiosHandlers()
+  registerHasheousHandlers(mainWindow)
+
+  setEmulatorMainWindow(mainWindow ?? null)
+  setHasheousMainWindow(mainWindow ?? null)
 }
 
 export { loadConfig, getConfigValue, setConfigValue } from './config'

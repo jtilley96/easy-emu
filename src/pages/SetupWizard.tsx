@@ -276,6 +276,15 @@ function EmulatorsStep() {
         </p>
       </div>
 
+      {/* Emulator setup warnings */}
+      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-6 text-sm">
+        <p className="text-yellow-200 font-medium mb-2">Important Setup Notes:</p>
+        <ul className="text-yellow-200/80 space-y-1 list-disc list-inside">
+          <li><strong>RetroArch</strong> requires cores to be installed before games can be launched. Open RetroArch and use Online Updater → Core Downloader.</li>
+          <li><strong>RPCS3 (PS3)</strong> requires PlayStation 3 firmware to be installed. Download from PlayStation website and install via File → Install Firmware.</li>
+        </ul>
+      </div>
+
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Loader2 size={48} className="animate-spin text-accent mb-4" />

@@ -16,17 +16,18 @@ export interface Game {
   lastPlayed?: string
   addedAt?: string
   isFavorite?: boolean
+  preferredEmulator?: string
 }
 
 export interface EmulatorInfo {
   id: string
   name: string
   path: string | null
-  executable: string
   platforms: string[]
   installed: boolean
-  version?: string
+  enabled: boolean
   canInstall: boolean
+  downloadUrl: string | null
 }
 
 export interface BiosFile {
@@ -65,4 +66,19 @@ export interface ScanProgress {
   total: number
   scanned: number
   current: string
+}
+
+export interface ScrapeResult {
+  gameId: string
+  success: boolean
+  error?: string
+  matched: boolean
+  title?: string
+}
+
+export interface ScrapeProgress {
+  current: number
+  total: number
+  currentGame: string
+  gameId: string
 }
