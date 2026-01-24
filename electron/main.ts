@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, session } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -10,10 +10,19 @@ let mainWindow: BrowserWindow | null = null
 
 const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 
-// Register local-image scheme before app ready (required for custom protocols)
+// Register custom schemes before app ready (required for custom protocols)
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'local-image',
+    privileges: {
+      bypassCSP: true,
+      standard: true,
+      secure: true,
+      supportFetchAPI: true
+    }
+  },
+  {
+    scheme: 'local-rom',
     privileges: {
       bypassCSP: true,
       standard: true,
@@ -59,6 +68,24 @@ function createWindow() {
 
 // App lifecycle
 app.whenReady().then(async () => {
+  // Configure Content Security Policy to allow EmulatorJS CDN
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: local-image:; " +
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.emulatorjs.org blob:; " +
+          "worker-src 'self' blob:; " +
+          "connect-src 'self' https://cdn.emulatorjs.org https://hasheous.org https://*.hasheous.org data: blob:; " +
+          "img-src 'self' data: blob: local-image: https:; " +
+          "media-src 'self' blob: data:; " +
+          "style-src 'self' 'unsafe-inline' https://cdn.emulatorjs.org;"
+        ]
+      }
+    })
+  })
+
   // Register local-image protocol to serve local image files (cover, backdrop, screenshots)
   protocol.handle('local-image', (request) => {
     try {
@@ -78,6 +105,25 @@ app.whenReady().then(async () => {
       return new Response(buffer, { headers: { 'Content-Type': contentType } })
     } catch (err) {
       console.error('local-image protocol error:', err)
+      return new Response(null, { status: 404 })
+    }
+  })
+
+  // Register local-rom protocol to serve ROM files for the embedded emulator
+  protocol.handle('local-rom', (request) => {
+    try {
+      const u = new URL(request.url)
+      const encoded = u.pathname.startsWith('/') ? u.pathname.slice(1) : u.pathname
+      const filePath = decodeURIComponent(encoded)
+      const buffer = fs.readFileSync(filePath)
+      return new Response(buffer, {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Access-Control-Allow-Origin': '*'
+        }
+      })
+    } catch (err) {
+      console.error('local-rom protocol error:', err)
       return new Response(null, { status: 404 })
     }
   })

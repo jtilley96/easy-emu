@@ -96,6 +96,53 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDefinitions: () => ipcRenderer.invoke('bios:getDefinitions'),
     checkStatus: () => ipcRenderer.invoke('bios:checkStatus'),
     setPath: (biosId: string, path: string) => ipcRenderer.invoke('bios:setPath', biosId, path)
+  },
+
+  // Core management operations
+  cores: {
+    getInstalled: () => ipcRenderer.invoke('cores:getInstalled'),
+    getAvailable: () => ipcRenderer.invoke('cores:getAvailable'),
+    download: (coreId: string) => ipcRenderer.invoke('cores:download', coreId),
+    delete: (coreId: string) => ipcRenderer.invoke('cores:delete', coreId),
+    getForPlatform: (platform: string) => ipcRenderer.invoke('cores:getForPlatform', platform),
+    canPlayEmbedded: (platform: string) => ipcRenderer.invoke('cores:canPlayEmbedded', platform),
+    onDownloadProgress: (callback: (progress: CoreDownloadProgress) => void) => {
+      const fn = (_: unknown, progress: CoreDownloadProgress) => callback(progress)
+      ipcRenderer.on('cores:downloadProgress', fn)
+      return () => ipcRenderer.removeListener('cores:downloadProgress', fn)
+    }
+  },
+
+  // Embedded emulator operations
+  embedded: {
+    canPlay: (platform: string) => ipcRenderer.invoke('embedded:canPlay', platform),
+    getCorePaths: (platform: string) => ipcRenderer.invoke('embedded:getCorePaths', platform),
+    startSession: (gameId: string) => ipcRenderer.invoke('embedded:startSession', gameId),
+    endSession: (gameId: string, playTimeMs?: number) => ipcRenderer.invoke('embedded:endSession', gameId, playTimeMs),
+    getGameRomPath: (gameId: string) => ipcRenderer.invoke('embedded:getGameRomPath', gameId),
+    getGameInfo: (gameId: string) => ipcRenderer.invoke('embedded:getGameInfo', gameId),
+    getGameRomData: (gameId: string) => ipcRenderer.invoke('embedded:getGameRomData', gameId),
+    getSystem: (platform: string) => ipcRenderer.invoke('embedded:getSystem', platform),
+    getCoresPath: () => ipcRenderer.invoke('embedded:getCoresPath'),
+    getConfig: () => ipcRenderer.invoke('embedded:getConfig'),
+    onSessionEnded: (callback: (gameId: string, durationMinutes: number) => void) => {
+      const fn = (_: unknown, payload: { gameId: string; durationMinutes: number }) =>
+        callback(payload.gameId, payload.durationMinutes)
+      ipcRenderer.on('embedded:sessionEnded', fn)
+      return () => ipcRenderer.removeListener('embedded:sessionEnded', fn)
+    }
+  },
+
+  // Save management operations
+  saves: {
+    loadSRAM: (gameId: string) => ipcRenderer.invoke('saves:loadSRAM', gameId),
+    saveSRAM: (gameId: string, data: ArrayBuffer) => ipcRenderer.invoke('saves:saveSRAM', gameId, data),
+    saveState: (gameId: string, slot: number, data: ArrayBuffer, screenshot?: ArrayBuffer) =>
+      ipcRenderer.invoke('saves:saveState', gameId, slot, data, screenshot),
+    loadState: (gameId: string, slot: number) => ipcRenderer.invoke('saves:loadState', gameId, slot),
+    deleteState: (gameId: string, slot: number) => ipcRenderer.invoke('saves:deleteState', gameId, slot),
+    listStates: (gameId: string) => ipcRenderer.invoke('saves:listStates', gameId),
+    getStateScreenshot: (gameId: string, slot: number) => ipcRenderer.invoke('saves:getStateScreenshot', gameId, slot)
   }
 })
 
@@ -156,6 +203,37 @@ export interface ElectronAPI {
     getDefinitions: () => Promise<BiosDefinition[]>
     checkStatus: () => Promise<BiosStatus[]>
     setPath: (biosId: string, path: string) => Promise<BiosStatus[]>
+  }
+  cores: {
+    getInstalled: () => Promise<InstalledCore[]>
+    getAvailable: () => Promise<AvailableCore[]>
+    download: (coreId: string) => Promise<void>
+    delete: (coreId: string) => Promise<void>
+    getForPlatform: (platform: string) => Promise<InstalledCore | null>
+    canPlayEmbedded: (platform: string) => Promise<boolean>
+    onDownloadProgress: (callback: (progress: CoreDownloadProgress) => void) => () => void
+  }
+  embedded: {
+    canPlay: (platform: string) => Promise<EmbeddedPlayCapability>
+    getCorePaths: (platform: string) => Promise<CorePaths | null>
+    startSession: (gameId: string) => Promise<{ success: boolean; error?: string }>
+    endSession: (gameId: string, playTimeMs?: number) => Promise<void>
+    getGameRomPath: (gameId: string) => Promise<string | null>
+    getGameInfo: (gameId: string) => Promise<{ path: string; platform: string; title: string } | null>
+    getGameRomData: (gameId: string) => Promise<Uint8Array | null>
+    getSystem: (platform: string) => Promise<string>
+    getCoresPath: () => Promise<string>
+    getConfig: () => Promise<EmbeddedConfig>
+    onSessionEnded: (callback: (gameId: string, durationMinutes: number) => void) => () => void
+  }
+  saves: {
+    loadSRAM: (gameId: string) => Promise<ArrayBuffer | null>
+    saveSRAM: (gameId: string, data: ArrayBuffer) => Promise<void>
+    saveState: (gameId: string, slot: number, data: ArrayBuffer, screenshot?: ArrayBuffer) => Promise<void>
+    loadState: (gameId: string, slot: number) => Promise<ArrayBuffer | null>
+    deleteState: (gameId: string, slot: number) => Promise<void>
+    listStates: (gameId: string) => Promise<SaveStateInfo[]>
+    getStateScreenshot: (gameId: string, slot: number) => Promise<ArrayBuffer | null>
   }
 }
 
@@ -223,6 +301,59 @@ interface ScrapeProgress {
   total: number
   currentGame: string
   gameId: string
+}
+
+interface InstalledCore {
+  id: string
+  name: string
+  platforms: string[]
+  coreName: string
+  dataPath: string
+  installedAt: string
+  version: string
+}
+
+interface AvailableCore {
+  id: string
+  name: string
+  platforms: string[]
+  coreName: string
+  size: number
+  installed: boolean
+}
+
+interface CoreDownloadProgress {
+  coreId: string
+  status: 'downloading' | 'verifying' | 'complete' | 'error'
+  progress: number
+  downloadedBytes: number
+  totalBytes: number
+  error?: string
+}
+
+interface EmbeddedPlayCapability {
+  canPlay: boolean
+  reason?: string
+  coreName?: string
+}
+
+interface CorePaths {
+  dataPath: string
+  coreName: string
+}
+
+interface EmbeddedConfig {
+  preferEmbedded: boolean
+  embeddedShader: string
+  embeddedIntegerScaling: boolean
+}
+
+interface SaveStateInfo {
+  slot: number
+  exists: boolean
+  timestamp?: string
+  screenshotPath?: string
+  size?: number
 }
 
 declare global {

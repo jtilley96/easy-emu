@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Play, Star, Clock } from 'lucide-react'
 import { Game } from '../types'
 import { formatPlayTime } from '../utils/format'
 import { pathToLocalImageUrl } from '../utils/image'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
+import { useEmulatorStore } from '../store/emulatorStore'
 
 interface GameCardProps {
   game: Game
@@ -15,14 +16,37 @@ interface GameCardProps {
 export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
   const { launchGame, toggleFavorite, platformsWithEmulator } = useLibraryStore()
   const { addToast } = useUIStore()
+  const { installedCores, preferEmbedded, loadCores } = useEmulatorStore()
+  const navigate = useNavigate()
   const [launching, setLaunching] = useState(false)
 
-  const canPlay = platformsWithEmulator.includes(game.platform)
-  const noEmulatorTooltip = `No emulator configured for ${game.platform}. Add one in Settings → Emulators.`
+  // Load cores on mount if not already loaded
+  useEffect(() => {
+    if (installedCores.length === 0) {
+      loadCores()
+    }
+  }, [installedCores.length, loadCores])
+
+  // Check if embedded core is available for this platform
+  const hasEmbeddedCore = installedCores.some(core =>
+    core.platforms.includes(game.platform)
+  )
+  const canPlayEmbedded = preferEmbedded && hasEmbeddedCore
+  const canPlayExternal = platformsWithEmulator.includes(game.platform)
+  const canPlay = canPlayEmbedded || canPlayExternal
+  const noEmulatorTooltip = `No emulator configured for ${game.platform}. Add one in Settings → Emulators or install an embedded core.`
 
   const handlePlay = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    // Prefer embedded if available and enabled
+    if (canPlayEmbedded) {
+      navigate(`/play/${game.id}`)
+      return
+    }
+
+    // Fall back to external emulator
     setLaunching(true)
     try {
       await launchGame(game.id, game.preferredEmulator || undefined)

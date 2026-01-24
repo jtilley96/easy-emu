@@ -17,14 +17,27 @@ import {
   AlertCircle,
   Loader2,
   Settings2,
-  XCircle
+  XCircle,
+  Cpu
 } from 'lucide-react'
 import { PLATFORMS } from '../constants/platforms'
 import { useAppStore } from '../store/appStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
+import CoreManagerSection from '../components/settings/CoreManagerSection'
+import { EmulatorInfo } from '../types'
 
-type SettingsSection = 'library' | 'emulators' | 'bios' | 'paths' | 'metadata' | 'controllers' | 'general'
+interface BiosStatus {
+  id: string
+  name: string
+  description: string
+  platform: string
+  required: boolean
+  found: boolean
+  path: string | null
+}
+
+type SettingsSection = 'library' | 'emulators' | 'cores' | 'bios' | 'paths' | 'metadata' | 'controllers' | 'general'
 
 interface NavItem {
   id: SettingsSection
@@ -35,6 +48,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'library', label: 'Library', icon: <FolderOpen size={18} /> },
   { id: 'emulators', label: 'Emulators', icon: <Gamepad2 size={18} /> },
+  { id: 'cores', label: 'Embedded Cores', icon: <Cpu size={18} /> },
   { id: 'bios', label: 'BIOS Files', icon: <HardDrive size={18} /> },
   { id: 'paths', label: 'Paths', icon: <Database size={18} /> },
   { id: 'metadata', label: 'Metadata', icon: <Download size={18} /> },
@@ -75,6 +89,7 @@ export default function Settings() {
       <div className="flex-1 overflow-auto p-6">
         {currentSection === 'library' && <LibrarySettings />}
         {currentSection === 'emulators' && <EmulatorsSettings />}
+        {currentSection === 'cores' && <CoreManagerSection />}
         {currentSection === 'bios' && <BiosSettings />}
         {currentSection === 'paths' && <PathsSettings />}
         {currentSection === 'metadata' && <MetadataSettings />}

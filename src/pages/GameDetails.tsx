@@ -11,20 +11,26 @@ import {
   Trash2,
   Settings2,
   Download,
-  Loader2
+  Loader2,
+  ChevronDown,
+  Monitor,
+  Gamepad2
 } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
+import { useEmulatorStore } from '../store/emulatorStore'
 import { useUIStore } from '../store/uiStore'
 import { formatPlayTime, formatDate } from '../utils/format'
 import { pathToLocalImageUrl } from '../utils/image'
 import EditMetadataModal from '../components/EditMetadataModal'
 import GameSettingsModal from '../components/GameSettingsModal'
 import ScreenshotGallery from '../components/ScreenshotGallery'
+import { EmbeddedPlayCapability } from '../types'
 
 export default function GameDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { games, launchGame, toggleFavorite, deleteGame, platformsWithEmulator, loadLibrary, scrapeGame, isScraping } = useLibraryStore()
+  const { checkCanPlayEmbedded, preferEmbedded } = useEmulatorStore()
   const { addToast } = useUIStore()
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -32,16 +38,27 @@ export default function GameDetails() {
   const [showGameSettingsModal, setShowGameSettingsModal] = useState(false)
   const [launching, setLaunching] = useState(false)
   const [scraping, setScraping] = useState(false)
+  const [showPlayMenu, setShowPlayMenu] = useState(false)
+  const [embeddedCapability, setEmbeddedCapability] = useState<EmbeddedPlayCapability | null>(null)
 
   const game = games.find(g => g.id === id)
-  const canPlay = game ? platformsWithEmulator.includes(game.platform) : false
+  const canPlayExternal = game ? platformsWithEmulator.includes(game.platform) : false
+  const canPlayEmbedded = embeddedCapability?.canPlay ?? false
+  const canPlay = canPlayExternal || canPlayEmbedded
   const noEmulatorTooltip = game
-    ? `No emulator configured for ${game.platform}. Add one in Settings → Emulators.`
+    ? `No emulator configured for ${game.platform}. Add one in Settings → Emulators or install an embedded core.`
     : ''
 
   useEffect(() => {
     loadLibrary()
   }, [loadLibrary])
+
+  // Check embedded play capability when game changes
+  useEffect(() => {
+    if (game) {
+      checkCanPlayEmbedded(game.platform).then(setEmbeddedCapability)
+    }
+  }, [game?.platform, checkCanPlayEmbedded])
 
   if (!game) {
     return (
@@ -59,6 +76,34 @@ export default function GameDetails() {
 
   const handlePlay = async () => {
     if (!game) return
+    setShowPlayMenu(false)
+
+    // If embedded is available and preferred (or no external available), use embedded
+    if (canPlayEmbedded && (preferEmbedded || !canPlayExternal)) {
+      navigate(`/play/${game.id}`)
+      return
+    }
+
+    // Otherwise use external emulator
+    setLaunching(true)
+    try {
+      await launchGame(game.id, game.preferredEmulator || undefined)
+    } catch (error) {
+      addToast('error', (error as Error)?.message ?? 'Failed to launch game')
+    } finally {
+      setLaunching(false)
+    }
+  }
+
+  const handlePlayEmbedded = () => {
+    if (!game) return
+    setShowPlayMenu(false)
+    navigate(`/play/${game.id}`)
+  }
+
+  const handlePlayExternal = async () => {
+    if (!game) return
+    setShowPlayMenu(false)
     setLaunching(true)
     try {
       await launchGame(game.id, game.preferredEmulator || undefined)
@@ -176,17 +221,60 @@ export default function GameDetails() {
 
             {/* Action buttons */}
             <div className="flex gap-3 mb-6">
-              <button
-                onClick={handlePlay}
-                disabled={launching}
-                title={!canPlay ? noEmulatorTooltip : undefined}
-                className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold text-lg ${
-                  canPlay ? 'bg-accent hover:bg-accent-hover' : 'bg-amber-600/80 hover:bg-amber-600'
-                } disabled:opacity-70`}
-              >
-                <Play size={24} fill="currentColor" />
-                {launching ? 'Launching…' : 'Play'}
-              </button>
+              {/* Play button with optional dropdown */}
+              <div className="relative">
+                <div className="flex">
+                  <button
+                    onClick={handlePlay}
+                    disabled={launching || !canPlay}
+                    title={!canPlay ? noEmulatorTooltip : undefined}
+                    className={`flex items-center gap-2 px-6 py-3 font-semibold text-lg ${
+                      canPlay ? 'bg-accent hover:bg-accent-hover' : 'bg-amber-600/80 hover:bg-amber-600'
+                    } disabled:opacity-70 ${
+                      canPlayEmbedded && canPlayExternal ? 'rounded-l-lg' : 'rounded-lg'
+                    }`}
+                  >
+                    <Play size={24} fill="currentColor" />
+                    {launching ? 'Launching…' : 'Play'}
+                  </button>
+
+                  {/* Show dropdown arrow when both options available */}
+                  {canPlayEmbedded && canPlayExternal && (
+                    <button
+                      onClick={() => setShowPlayMenu(!showPlayMenu)}
+                      className="px-2 bg-accent hover:bg-accent-hover rounded-r-lg border-l border-white/20"
+                    >
+                      <ChevronDown size={20} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown menu */}
+                {showPlayMenu && canPlayEmbedded && canPlayExternal && (
+                  <div className="absolute top-full left-0 mt-2 w-56 bg-surface-800 rounded-lg shadow-xl border border-surface-700 overflow-hidden z-10">
+                    <button
+                      onClick={handlePlayEmbedded}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-700 text-left"
+                    >
+                      <Monitor size={18} className="text-accent" />
+                      <div>
+                        <div className="font-medium">Play in Browser</div>
+                        <div className="text-xs text-surface-400">Built-in emulator</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={handlePlayExternal}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-700 text-left border-t border-surface-700"
+                    >
+                      <Gamepad2 size={18} className="text-surface-300" />
+                      <div>
+                        <div className="font-medium">Play with Emulator</div>
+                        <div className="text-xs text-surface-400">External application</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={handleToggleFavorite}

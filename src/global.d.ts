@@ -79,6 +79,60 @@ declare global {
     gameId: string
   }
 
+  // Embedded Emulator Types
+  interface InstalledCore {
+    id: string
+    name: string
+    platforms: string[]
+    coreName: string
+    dataPath: string
+    installedAt: string
+    version: string
+  }
+
+  interface AvailableCore {
+    id: string
+    name: string
+    platforms: string[]
+    coreName: string
+    size: number
+    installed: boolean
+  }
+
+  interface CoreDownloadProgress {
+    coreId: string
+    status: 'downloading' | 'verifying' | 'complete' | 'error'
+    progress: number
+    downloadedBytes: number
+    totalBytes: number
+    error?: string
+  }
+
+  interface EmbeddedPlayCapability {
+    canPlay: boolean
+    reason?: string
+    coreName?: string
+  }
+
+  interface CorePaths {
+    dataPath: string
+    coreName: string
+  }
+
+  interface EmbeddedConfig {
+    preferEmbedded: boolean
+    embeddedShader: string
+    embeddedIntegerScaling: boolean
+  }
+
+  interface SaveStateInfo {
+    slot: number
+    exists: boolean
+    timestamp?: string
+    screenshotPath?: string
+    size?: number
+  }
+
   interface ElectronAPI {
     window: {
       minimize: () => Promise<void>
@@ -135,6 +189,37 @@ declare global {
       getDefinitions: () => Promise<BiosDefinition[]>
       checkStatus: () => Promise<BiosStatus[]>
       setPath: (biosId: string, path: string) => Promise<BiosStatus[]>
+    }
+    cores: {
+      getInstalled: () => Promise<InstalledCore[]>
+      getAvailable: () => Promise<AvailableCore[]>
+      download: (coreId: string) => Promise<void>
+      delete: (coreId: string) => Promise<void>
+      getForPlatform: (platform: string) => Promise<InstalledCore | null>
+      canPlayEmbedded: (platform: string) => Promise<boolean>
+      onDownloadProgress: (callback: (progress: CoreDownloadProgress) => void) => () => void
+    }
+    embedded: {
+      canPlay: (platform: string) => Promise<EmbeddedPlayCapability>
+      getCorePaths: (platform: string) => Promise<CorePaths | null>
+      startSession: (gameId: string) => Promise<{ success: boolean; error?: string }>
+      endSession: (gameId: string, playTimeMs?: number) => Promise<void>
+      getGameRomPath: (gameId: string) => Promise<string | null>
+      getGameInfo: (gameId: string) => Promise<{ path: string; platform: string; title: string } | null>
+      getGameRomData: (gameId: string) => Promise<Uint8Array | null>
+      getSystem: (platform: string) => Promise<string>
+      getCoresPath: () => Promise<string>
+      getConfig: () => Promise<EmbeddedConfig>
+      onSessionEnded: (callback: (gameId: string, durationMinutes: number) => void) => () => void
+    }
+    saves: {
+      loadSRAM: (gameId: string) => Promise<ArrayBuffer | null>
+      saveSRAM: (gameId: string, data: ArrayBuffer) => Promise<void>
+      saveState: (gameId: string, slot: number, data: ArrayBuffer, screenshot?: ArrayBuffer) => Promise<void>
+      loadState: (gameId: string, slot: number) => Promise<ArrayBuffer | null>
+      deleteState: (gameId: string, slot: number) => Promise<void>
+      listStates: (gameId: string) => Promise<SaveStateInfo[]>
+      getStateScreenshot: (gameId: string, slot: number) => Promise<ArrayBuffer | null>
     }
   }
 

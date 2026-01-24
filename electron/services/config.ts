@@ -16,6 +16,13 @@ export interface AppConfig {
   autoScrape: boolean
   startMinimized: boolean
   checkUpdates: boolean
+  // Embedded emulation settings
+  embeddedCoresPath: string
+  preferEmbedded: boolean
+  embeddedShader: 'none' | 'crt-lottes' | 'crt-mattias' | 'scanlines'
+  embeddedIntegerScaling: boolean
+  embeddedAutoSave: boolean
+  embeddedAutoSaveInterval: number // seconds
 }
 
 const CONFIG_FILE = 'config.json'
@@ -41,7 +48,14 @@ function getDefaultConfig(): AppConfig {
     coversPath: path.join(userData, 'covers'),
     autoScrape: false,
     startMinimized: false,
-    checkUpdates: true
+    checkUpdates: true,
+    // Embedded emulation defaults
+    embeddedCoresPath: path.join(userData, 'cores'),
+    preferEmbedded: true,
+    embeddedShader: 'none',
+    embeddedIntegerScaling: true,
+    embeddedAutoSave: true,
+    embeddedAutoSaveInterval: 60
   }
 }
 
@@ -92,7 +106,8 @@ function ensureDirectories(): void {
     config.savesPath,
     config.statesPath,
     config.screenshotsPath,
-    config.coversPath
+    config.coversPath,
+    config.embeddedCoresPath
   ]
 
   for (const dir of dirs) {

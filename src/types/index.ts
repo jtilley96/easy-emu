@@ -82,3 +82,57 @@ export interface ScrapeProgress {
   currentGame: string
   gameId: string
 }
+
+// Embedded Emulator Types
+export interface InstalledCore {
+  id: string
+  name: string
+  platforms: string[]
+  coreName: string
+  dataPath: string
+  installedAt: string
+  version: string
+}
+
+export interface AvailableCore {
+  id: string
+  name: string
+  platforms: string[]
+  coreName: string
+  size: number
+  installed: boolean
+}
+
+export interface CoreDownloadProgress {
+  coreId: string
+  status: 'downloading' | 'verifying' | 'complete' | 'error'
+  progress: number
+  downloadedBytes: number
+  totalBytes: number
+  error?: string
+}
+
+export interface EmbeddedPlayCapability {
+  canPlay: boolean
+  reason?: string
+  coreName?: string
+}
+
+export interface CorePaths {
+  dataPath: string
+  coreName: string
+}
+
+export interface EmbeddedConfig {
+  preferEmbedded: boolean
+  embeddedShader: string
+  embeddedIntegerScaling: boolean
+}
+
+export interface SaveStateInfo {
+  slot: number
+  exists: boolean
+  timestamp?: string
+  screenshotPath?: string
+  size?: number
+}
