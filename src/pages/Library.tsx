@@ -2,25 +2,24 @@ import { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, Grid, List, SlidersHorizontal, Star, Clock } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
+import { useUIStore } from '../store/uiStore'
 import GameCard from '../components/GameCard'
 import SearchBar from '../components/SearchBar'
 
-type ViewMode = 'grid' | 'list'
 type SortBy = 'title' | 'lastPlayed' | 'platform' | 'recentlyAdded'
 type QuickFilter = 'recent' | 'favorites' | null
 
 export default function Library() {
   const { games, isScanning, loadLibrary } = useLibraryStore()
+  const { libraryPlatformFilter, setLibraryPlatformFilter, libraryViewMode, setLibraryViewMode } = useUIStore()
   
   useEffect(() => {
     loadLibrary()
   }, [loadLibrary])
   const [searchParams] = useSearchParams()
   const quickFilter = searchParams.get('filter') as QuickFilter
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortBy>('title')
-  const [filterPlatform, setFilterPlatform] = useState<string | null>(null)
 
   const platforms = useMemo(() => {
     const platformSet = new Set(games.map(g => g.platform))
@@ -47,16 +46,18 @@ export default function Library() {
 
     // Search filter
     if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      result = result.filter(game =>
-        game.title.toLowerCase().includes(query) ||
-        game.platform.toLowerCase().includes(query)
-      )
+      const query = searchQuery.trim().toLowerCase()
+      if (query) {
+        result = result.filter(game =>
+          game.title.toLowerCase().includes(query) ||
+          game.platform.toLowerCase().includes(query)
+        )
+      }
     }
 
     // Platform filter
-    if (filterPlatform) {
-      result = result.filter(game => game.platform === filterPlatform)
+    if (libraryPlatformFilter) {
+      result = result.filter(game => game.platform === libraryPlatformFilter)
     }
 
     // Sort (skip if quick filter already sorted)
@@ -78,7 +79,7 @@ export default function Library() {
     }
 
     return result
-  }, [games, searchQuery, sortBy, filterPlatform, quickFilter])
+  }, [games, searchQuery, sortBy, libraryPlatformFilter, quickFilter])
 
   return (
     <div className="flex flex-col h-full">
@@ -107,8 +108,8 @@ export default function Library() {
 
           {/* Platform filter */}
           <select
-            value={filterPlatform || ''}
-            onChange={e => setFilterPlatform(e.target.value || null)}
+            value={libraryPlatformFilter || ''}
+            onChange={e => setLibraryPlatformFilter(e.target.value || null)}
             className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
           >
             <option value="">All Platforms</option>
@@ -134,15 +135,15 @@ export default function Library() {
           {/* View mode toggle */}
           <div className="flex border border-surface-700 rounded-lg overflow-hidden">
             <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 ${viewMode === 'grid' ? 'bg-accent' : 'bg-surface-800 hover:bg-surface-700'}`}
+              onClick={() => setLibraryViewMode('grid')}
+              className={`p-2 ${libraryViewMode === 'grid' ? 'bg-accent' : 'bg-surface-800 hover:bg-surface-700'}`}
               title="Grid view"
             >
               <Grid size={18} />
             </button>
             <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 ${viewMode === 'list' ? 'bg-accent' : 'bg-surface-800 hover:bg-surface-700'}`}
+              onClick={() => setLibraryViewMode('list')}
+              className={`p-2 ${libraryViewMode === 'list' ? 'bg-accent' : 'bg-surface-800 hover:bg-surface-700'}`}
               title="List view"
             >
               <List size={18} />
@@ -204,7 +205,7 @@ export default function Library() {
               </>
             )}
           </div>
-        ) : viewMode === 'grid' ? (
+        ) : libraryViewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
             {filteredGames.map(game => (
               <GameCard key={game.id} game={game} />

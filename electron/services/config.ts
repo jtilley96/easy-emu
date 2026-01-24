@@ -33,6 +33,9 @@ export interface AppConfig {
   bigPictureModeEnabled: boolean
   bigPictureOnStartup: boolean
   bigPictureCardSize: 'small' | 'medium' | 'large'
+  // Library UI settings
+  libraryViewMode: 'grid' | 'list'
+  libraryPlatformFilter: string | null
 }
 
 const CONFIG_FILE = 'config.json'
@@ -75,7 +78,10 @@ function getDefaultConfig(): AppConfig {
     // Big Picture defaults
     bigPictureModeEnabled: false,
     bigPictureOnStartup: false,
-    bigPictureCardSize: 'medium'
+    bigPictureCardSize: 'medium',
+    // Library UI defaults
+    libraryViewMode: 'grid',
+    libraryPlatformFilter: null
   }
 }
 
