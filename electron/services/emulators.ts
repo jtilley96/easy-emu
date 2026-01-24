@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, app } from 'electron'
 import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
@@ -450,7 +450,8 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
   if (emulatorDef.id === 'rpcs3') {
     const rpcs3Dir = path.dirname(emulatorPath)
     const devFlash = path.join(rpcs3Dir, 'dev_flash')
-    const devFlashAlt = path.join(process.env.APPDATA || '', 'rpcs3', 'dev_flash')
+    const appDataDir = app.getPath('appData')
+    const devFlashAlt = path.join(appDataDir, 'rpcs3', 'dev_flash')
     if (!fs.existsSync(devFlash) && !fs.existsSync(devFlashAlt)) {
       throw new Error(
         `RPCS3 firmware not installed.\n\n` +
@@ -519,7 +520,9 @@ export function registerEmulatorHandlers(): void {
       if (!isEmulatorEnabled(def.id) || !detectEmulator(def)) continue
       for (const p of def.platforms) platforms.add(p)
     }
-    return [...platforms]
+    const list: string[] = []
+    platforms.forEach(platform => list.push(platform))
+    return list
   })
 
   ipcMain.handle('emulators:launch', async (_event, gameId: string, emulatorId?: string) => {

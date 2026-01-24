@@ -254,6 +254,10 @@ export async function downloadBackdrop(imageId: string, gameId: string): Promise
     const coversPath = getConfigValue('coversPath')
     const backdropFilePath = path.join(coversPath, `${gameId}_backdrop.jpg`)
 
+    if (!fs.existsSync(coversPath)) {
+      fs.mkdirSync(coversPath, { recursive: true })
+    }
+
     const buffer = Buffer.from(await response.arrayBuffer())
     fs.writeFileSync(backdropFilePath, buffer)
 

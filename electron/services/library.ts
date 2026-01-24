@@ -131,21 +131,34 @@ function detectPlatformFromPath(filePath: string): string {
   }
 
   const lowerPath = filePath.toLowerCase().replace(/\\/g, '/')
-  const pathSegments = lowerPath.split('/')
+  const pathSegments = lowerPath.split('/').filter(Boolean)
   const filenameNoExt = path.basename(filePath, path.extname(filePath)).toLowerCase()
 
-  // Check: filename (e.g. "Game (PS3).iso"), parent folder, grandparent, then full path.
-  const foldersToCheck: string[] = [filenameNoExt]
-  if (pathSegments.length >= 2) foldersToCheck.push(pathSegments[pathSegments.length - 2])
-  if (pathSegments.length >= 3) foldersToCheck.push(pathSegments[pathSegments.length - 3])
-  foldersToCheck.push(lowerPath)
+  const segmentMatchesHint = (segment: string, hint: string): boolean => {
+    if (hint.length <= 2) {
+      const tokens = segment.split(/[^a-z0-9]+/).filter(Boolean)
+      return tokens.some(token => token === hint)
+    }
+    return segment.includes(hint)
+  }
+
+  // Check folders first (nearest to farthest), then filename.
+  const foldersToCheck = pathSegments.slice(0, -1).reverse()
 
   for (const segment of foldersToCheck) {
     for (const { platform: platformId, hints } of PLATFORM_HINTS) {
       for (const hint of hints) {
-        if (segment.includes(hint)) {
+        if (segmentMatchesHint(segment, hint)) {
           return platformId
         }
+      }
+    }
+  }
+
+  for (const { platform: platformId, hints } of PLATFORM_HINTS) {
+    for (const hint of hints) {
+      if (segmentMatchesHint(filenameNoExt, hint)) {
+        return platformId
       }
     }
   }
