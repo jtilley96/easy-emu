@@ -32,23 +32,38 @@ const EMULATORJS_CDN = 'https://cdn.emulatorjs.org/stable'
 let isEmulatorLoading = false
 let isEmulatorLoaded = false
 
+// Filter out EmulatorJS translation logs
+let originalConsoleLog: typeof console.log | null = null
+function setupConsoleFilter() {
+  if (originalConsoleLog) return // Already set up
+  
+  originalConsoleLog = console.log.bind(console)
+  console.log = (...args: any[]) => {
+    const message = args.join(' ')
+    // Filter out EmulatorJS translation logs
+    if (typeof message === 'string' && message.includes('Translation')) {
+      return
+    }
+    if (originalConsoleLog) {
+      originalConsoleLog(...args)
+    }
+  }
+}
+
 /**
  * Automatically select the gamepad in EmulatorJS settings
  * Tries multiple approaches to programmatically set the gamepad
  */
 function autoSelectGamepad(gamepadIndex: number): void {
-  console.log(`[EmulatorCanvas] Attempting to auto-select gamepad index: ${gamepadIndex}`)
-  
   // Approach 1: Try to access EmulatorJS's internal settings API
   try {
     const emu = window.EJS_emulator
     if (emu && typeof (emu as any).setGamepad === 'function') {
       (emu as any).setGamepad(gamepadIndex)
-      console.log('[EmulatorCanvas] Set gamepad via emulator API')
       return
     }
   } catch (err) {
-    console.log('[EmulatorCanvas] Emulator API approach failed:', err)
+    // Emulator API approach failed, continue to next approach
   }
 
   // Approach 2: Try to set gamepad via EJS_STORAGE (before game starts)
@@ -60,13 +75,12 @@ function autoSelectGamepad(gamepadIndex: number): void {
         storage.setItem('controller', String(gamepadIndex))
         storage.setItem('EJS_gamepad', String(gamepadIndex))
         storage.setItem('EJS_controller', String(gamepadIndex))
-        console.log('[EmulatorCanvas] Set gamepad via EJS_STORAGE')
         // If this works, we can skip DOM manipulation
         return
       }
     }
   } catch (err) {
-    console.log('[EmulatorCanvas] EJS_STORAGE approach failed:', err)
+    // EJS_STORAGE approach failed, continue to next approach
   }
 
   // Approach 3: Try localStorage (EmulatorJS may use this)
@@ -76,11 +90,10 @@ function autoSelectGamepad(gamepadIndex: number): void {
     localStorage.setItem('EJS_controller', String(gamepadIndex))
     localStorage.setItem('gamepad', String(gamepadIndex))
     localStorage.setItem('controller', String(gamepadIndex))
-    console.log('[EmulatorCanvas] Set gamepad via localStorage')
     // Try this first - if EmulatorJS reads from localStorage on init, this might work
     // and we can skip the DOM manipulation entirely
   } catch (err) {
-    console.log('[EmulatorCanvas] localStorage approach failed:', err)
+    // localStorage approach failed, continue to DOM manipulation
   }
 
   // Approach 4: DOM manipulation - find and set the gamepad dropdown
@@ -99,7 +112,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
         setTimeout(tryFindGamepadButton, 500)
         return
       }
-      console.log('[EmulatorCanvas] Player div not found after max attempts')
       return
     }
     
@@ -154,7 +166,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
     }
     
     if (gamepadButton) {
-      console.log('[EmulatorCanvas] Found gamepad button, opening settings...')
       // Click to open gamepad settings
       gamepadButton.click()
       
@@ -213,14 +224,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
               }
             }
             
-            // Log all available options for debugging
-            console.log(`[EmulatorCanvas] Available gamepad options in dropdown:`)
-            for (let i = 0; i < gamepadSelect.options.length; i++) {
-              const option = gamepadSelect.options[i]
-              console.log(`  Option ${i}: value="${option.value}", text="${option.text}"`)
-            }
-            console.log(`[EmulatorCanvas] Looking for gamepad index: ${gamepadIndex}, ID: "${targetGamepadId}"`)
-            
             // Try to find and select the matching gamepad
             // EmulatorJS formats options like "Xbox One Game Controller (STANDARD GAMEPAD)_0"
             // The format is: "{Gamepad ID}_{index}"
@@ -241,7 +244,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
                 if (indexMatch && parseInt(indexMatch[1]) === gamepadIndex) {
                   matchedOptionIndex = i
                   selected = true
-                  console.log(`[EmulatorCanvas] Matched by gamepad ID and index: "${optionValue}"`)
                   break
                 }
               }
@@ -252,7 +254,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
                 if (indexMatch && parseInt(indexMatch[1]) === gamepadIndex) {
                   matchedOptionIndex = i
                   selected = true
-                  console.log(`[EmulatorCanvas] Matched by gamepad ID in text: "${option.text}"`)
                   break
                 }
               }
@@ -261,7 +262,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
               if (optionValue === String(gamepadIndex) || optionValue.endsWith(`_${gamepadIndex}`)) {
                 matchedOptionIndex = i
                 selected = true
-                console.log(`[EmulatorCanvas] Matched by value index: "${optionValue}"`)
                 break
               }
               
@@ -270,7 +270,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
               if (indexInText && parseInt(indexInText[1]) === gamepadIndex) {
                 matchedOptionIndex = i
                 selected = true
-                console.log(`[EmulatorCanvas] Matched by text index: "${option.text}"`)
                 break
               }
               
@@ -279,7 +278,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
                   (optionValue.includes('gamepad') || optionValue.includes('controller') || optionValue.includes('_'))) {
                 matchedOptionIndex = i
                 selected = true
-                console.log(`[EmulatorCanvas] Matched by value pattern: "${optionValue}"`)
                 break
               }
             }
@@ -292,9 +290,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
               
               // Verify it was set
               if (gamepadSelect.selectedIndex === matchedOptionIndex) {
-                console.log(`[EmulatorCanvas] Successfully set gamepad dropdown to option ${matchedOptionIndex} (${gamepadSelect.options[matchedOptionIndex].text})`)
-                console.log(`[EmulatorCanvas] Current select value: "${gamepadSelect.value}", selectedIndex: ${gamepadSelect.selectedIndex}`)
-                
                 // Now trigger the change event so EmulatorJS actually applies the selection
                 // Trigger events immediately (DOM is already updated)
                 try {
@@ -322,8 +317,6 @@ function autoSelectGamepad(gamepadIndex: number): void {
                   const uiEvent = new UIEvent('change', { bubbles: true, cancelable: false, view: window })
                   gamepadSelect.dispatchEvent(uiEvent)
                   
-                  console.log('[EmulatorCanvas] Triggered change events to apply gamepad selection')
-                  
                   // Blur immediately to simulate user finishing the selection
                   gamepadSelect.blur()
                 } catch (err) {
@@ -332,31 +325,20 @@ function autoSelectGamepad(gamepadIndex: number): void {
               } else {
                 console.warn(`[EmulatorCanvas] Failed to set selectedIndex - current: ${gamepadSelect.selectedIndex}, wanted: ${matchedOptionIndex}`)
               }
-              
-              // Panel will remain open - user can close manually
-              console.log('[EmulatorCanvas] Gamepad value set. Panel will remain open - user can close manually.')
             } else {
-              console.log(`[EmulatorCanvas] Could not find matching option for gamepad index ${gamepadIndex}`)
-              console.log(`[EmulatorCanvas] Available gamepad indices: ${availableIndices.join(', ')}`)
               // Close panel if selection failed
               setTimeout(() => {
                 const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
                 document.dispatchEvent(escapeEvent)
               }, 200)
             }
-          } else {
-            console.log('[EmulatorCanvas] Gamepad select element not found in settings panel')
           }
-        } else {
-          console.log('[EmulatorCanvas] Settings panel not found')
         }
       }, 150) // Wait for panel to open (reduced from 500ms)
     } else {
       // Retry if we haven't exceeded max attempts (faster retry for near-instant)
       if (attempts < maxAttempts) {
         setTimeout(tryFindGamepadButton, 200)
-      } else {
-        console.log(`[EmulatorCanvas] Gamepad button not found after ${maxAttempts} attempts - EmulatorJS UI may not be ready`)
       }
     }
   }
@@ -380,16 +362,12 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
 
     // Initialize emulator
     const initializeEmulator = useCallback(async () => {
-      console.log('[EmulatorCanvas] initializeEmulator called, flags:', { isEmulatorLoading, isEmulatorLoaded })
-
       // Prevent double initialization
       if (isEmulatorLoading || isEmulatorLoaded) {
-        console.log('[EmulatorCanvas] Skipping - already loading or loaded')
         return
       }
 
       if (!containerRef.current) {
-        console.log('[EmulatorCanvas] Skipping - no container ref')
         return
       }
 
@@ -419,7 +397,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         if (!romData || romData.length === 0) {
           throw new Error('Failed to load ROM file')
         }
-        console.log(`[EmulatorCanvas] Loaded ROM: ${romData.length} bytes`)
 
         // Load existing SRAM
         const sramData = await loadSRAM(gameId)
@@ -440,8 +417,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         
         if (gamepadToUse) {
           gamepadIndexRef.current = gamepadToUse.index
-          console.log(`[EmulatorCanvas] Gamepad detected: ${gamepadToUse.name} (index: ${gamepadToUse.index}, type: ${gamepadToUse.type})`)
-          console.log(`[EmulatorCanvas] Using physical controller layout: ${gamepadToUse.type} (not platform-specific)`)
           
           // Set gamepad preference BEFORE EmulatorJS initializes
           // This way EmulatorJS might pick it up automatically on load
@@ -467,13 +442,11 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
                 storage.setItem('EJS_controllerType', gamepadToUse.type)
               }
             }
-            console.log('[EmulatorCanvas] Set gamepad preference in storage before EmulatorJS init')
           } catch (err) {
-            console.log('[EmulatorCanvas] Failed to set gamepad preference in storage:', err)
+            // Failed to set gamepad preference in storage
           }
         } else {
           gamepadIndexRef.current = null
-          console.log('[EmulatorCanvas] No gamepad detected')
         }
 
         // Configure EmulatorJS FIRST (before creating elements or loading script)
@@ -515,8 +488,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           cacheManager: false
         }
 
-        console.log(`[EmulatorCanvas] Config set - Game ID: ${gameId}, Core: ${corePaths.coreName}`)
-
         // Set up game start callback
         window.EJS_onGameStart = () => {
           if (mountedRef.current) {
@@ -555,6 +526,9 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         // Set player selector (must be set after element exists)
         window.EJS_player = '#ejs-player'
 
+        // Filter console logs before loading EmulatorJS
+        setupConsoleFilter()
+
         // Load the EmulatorJS loader script (only once)
         const existingScript = document.getElementById('emulatorjs-loader')
         if (!existingScript) {
@@ -578,7 +552,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
 
     // Cleanup emulator
     const cleanupEmulator = useCallback(async () => {
-      console.log('[EmulatorCanvas] Cleaning up emulator...')
       mountedRef.current = false
 
       // Reset flags immediately to allow re-initialization
@@ -635,7 +608,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           delete (window as unknown as Record<string, unknown>)[key]
         } catch { /* ignore */ }
       })
-      console.log('[EmulatorCanvas] Cleaned up EJS config globals')
 
       // NOTE: Do NOT remove EmulatorJS scripts or EJS_STORAGE
       // Removing and re-adding scripts causes "already declared" errors
@@ -664,7 +636,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           if (typeof emu.gameManager.getState === 'function') {
             state = emu.gameManager.getState()
           }
-          console.log('[EmulatorCanvas] Save state result:', state, 'type:', state?.constructor?.name)
           // Convert Uint8Array to ArrayBuffer if needed
           if (state instanceof Uint8Array) {
             const arrayBuffer = state.buffer as ArrayBuffer
@@ -685,7 +656,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         try {
           // EmulatorJS expects Uint8Array for setState
           const uint8Data = new Uint8Array(data)
-          console.log('[EmulatorCanvas] Loading state, size:', uint8Data.length)
           if (typeof emu.gameManager.setState === 'function') {
             emu.gameManager.setState(uint8Data)
           }

@@ -52,6 +52,8 @@ export default function BPGameGrid({
     const totalGames = games.length
     if (totalGames === 0) return
 
+    let shouldCallOnBack = false
+
     setFocusedIndex(current => {
       let newIndex = current
 
@@ -82,7 +84,7 @@ export default function BPGameGrid({
             newIndex = current - columns
           } else {
             // At top row - exit to parent (filters)
-            onBack?.()
+            shouldCallOnBack = true
             return current  // Don't change index
           }
           break
@@ -101,7 +103,12 @@ export default function BPGameGrid({
 
       return Math.max(0, Math.min(newIndex, totalGames - 1))
     })
-  }, [games.length, columns])
+
+    // Call onBack after state update to avoid React warning
+    if (shouldCallOnBack) {
+      setTimeout(() => onBack?.(), 0)
+    }
+  }, [games.length, columns, onBack])
 
   const handleConfirm = useCallback(() => {
     if (games[focusedIndex]) {

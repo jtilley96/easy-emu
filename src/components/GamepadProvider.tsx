@@ -15,7 +15,6 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
   const lastGamepadCount = useRef(0)
 
   useEffect(() => {
-    console.log('[GamepadProvider] Initializing...')
     const service = getGamepadService()
 
     // Set deadzone from settings
@@ -25,7 +24,6 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
     const unsubscribe = service.subscribe((gamepads: GamepadState[]) => {
       // Only log when count changes to avoid spam
       if (gamepads.length !== lastGamepadCount.current) {
-        console.log(`[GamepadProvider] Gamepads updated: ${gamepads.length} connected`)
         lastGamepadCount.current = gamepads.length
       }
       setGamepads(gamepads)
@@ -33,20 +31,17 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
       // Auto-select first gamepad if none active
       const store = useInputStore.getState()
       if (store.activeGamepadIndex === null && gamepads.length > 0) {
-        console.log(`[GamepadProvider] Auto-selecting gamepad: ${gamepads[0].name}`)
         setActiveGamepad(gamepads[0].index)
       }
     })
 
     // Listen for connection events
     const unsubscribeConnection = service.onConnection((gamepad, connected) => {
-      console.log(`[GamepadProvider] Controller ${connected ? 'connected' : 'disconnected'}: ${gamepad.name}`)
       if (connected) {
         addToast('success', `Controller connected: ${gamepad.name}. Press Start for Big Picture mode`)
         // Auto-select new controller if none is active
         const store = useInputStore.getState()
         if (store.activeGamepadIndex === null) {
-          console.log(`[GamepadProvider] Setting active gamepad to index ${gamepad.index}`)
           setActiveGamepad(gamepad.index)
         }
       } else {
@@ -58,7 +53,6 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
     // Note: Gamepads are only visible to the browser after user interaction (button press)
     const initialGamepads = service.getGamepads()
     if (initialGamepads.length > 0) {
-      console.log(`[GamepadProvider] Found ${initialGamepads.length} initial gamepad(s)`)
       setGamepads(initialGamepads)
       setActiveGamepad(initialGamepads[0].index)
     }
@@ -121,7 +115,6 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
         const isCurrentlyInBigPicture = currentHash.includes('/bigpicture')
         const newMode = !isCurrentlyInBigPicture
         
-        console.log('[GamepadProvider] Start pressed - toggling Big Picture mode', { isCurrentlyInBigPicture, newMode })
         isProcessingStart = true
         
         // Update state and navigate immediately using the computed newMode

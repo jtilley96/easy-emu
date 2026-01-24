@@ -69,18 +69,26 @@ function createWindow() {
 // App lifecycle
 app.whenReady().then(async () => {
   // Configure Content Security Policy to allow EmulatorJS CDN
+  // Note: 'unsafe-eval' is required for EmulatorJS to function properly.
+  // Electron will show a security warning in development about this, but the warning
+  // will not appear in production builds. This is a known limitation when using
+  // EmulatorJS which requires dynamic code evaluation.
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: local-image:; " +
+          "default-src 'self' local-image: local-rom: blob: data:; " +
           "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.emulatorjs.org blob:; " +
+          "style-src 'self' 'unsafe-inline' https://cdn.emulatorjs.org; " +
+          "connect-src 'self' local-image: local-rom: https://cdn.emulatorjs.org https://hasheous.org https://*.hasheous.org data: blob:; " +
+          "img-src 'self' local-image: data: blob: https:; " +
           "worker-src 'self' blob:; " +
-          "connect-src 'self' https://cdn.emulatorjs.org https://hasheous.org https://*.hasheous.org data: blob:; " +
-          "img-src 'self' data: blob: local-image: https:; " +
           "media-src 'self' blob: data:; " +
-          "style-src 'self' 'unsafe-inline' https://cdn.emulatorjs.org;"
+          "font-src 'self' data: blob:; " +
+          "object-src 'none'; " +
+          "base-uri 'self'; " +
+          "form-action 'none';"
         ]
       }
     })

@@ -125,15 +125,12 @@ class GamepadService {
 
     // Start polling
     this.startPolling()
-
-    console.log('[GamepadService] Initialized')
   }
 
   private checkExistingGamepads() {
     const rawGamepads = navigator.getGamepads()
     for (const gamepad of rawGamepads) {
       if (gamepad && gamepad.connected) {
-        console.log(`[GamepadService] Found existing gamepad: ${gamepad.id}`)
         const state = this.createGamepadState(gamepad)
         this.gamepads.set(gamepad.index, state)
         this.previousButtonStates.set(gamepad.index, gamepad.buttons.map(() => false))
@@ -150,7 +147,6 @@ class GamepadService {
 
   private handleGamepadConnected = (event: GamepadEvent) => {
     const gamepad = event.gamepad
-    console.log(`[GamepadService] Gamepad connected: ${gamepad.id} (index: ${gamepad.index})`)
     const state = this.createGamepadState(gamepad)
     this.gamepads.set(gamepad.index, state)
     this.previousButtonStates.set(gamepad.index, gamepad.buttons.map(() => false))
@@ -159,7 +155,6 @@ class GamepadService {
   }
 
   private handleGamepadDisconnected = (event: GamepadEvent) => {
-    console.log(`[GamepadService] Gamepad disconnected: ${event.gamepad.id}`)
     const state = this.gamepads.get(event.gamepad.index)
     if (state) {
       state.connected = false

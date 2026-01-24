@@ -221,7 +221,6 @@ export async function scanFolders(folders: string[]): Promise<void> {
   // Auto-scrape metadata for new games if enabled
   const autoScrape = getConfigValue('autoScrape')
   if (autoScrape && newGameIds.length > 0) {
-    console.log(`Auto-scraping metadata for ${newGameIds.length} new game(s)...`)
     // Scrape asynchronously to avoid blocking the scan operation
     // Use a small delay between requests to be nice to the API
     for (let i = 0; i < newGameIds.length; i++) {
@@ -237,7 +236,6 @@ export async function scanFolders(folders: string[]): Promise<void> {
         // Continue with other games even if one fails
       }
     }
-    console.log(`Auto-scrape complete for ${newGameIds.length} game(s)`)
   }
 }
 

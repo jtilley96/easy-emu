@@ -152,7 +152,6 @@ export async function lookupByHash(md5: string, sha1: string): Promise<HasheousL
 
     if (!response.ok) {
       if (response.status === 404) {
-        console.log('Hasheous: No match found (404)')
         return null
       }
       const text = await response.text()
@@ -161,7 +160,6 @@ export async function lookupByHash(md5: string, sha1: string): Promise<HasheousL
     }
 
     const data = await response.json()
-    console.log('Hasheous lookup response:', JSON.stringify(data, null, 2))
     return data as HasheousLookupResult
   } catch (error) {
     console.error('Hasheous lookup error:', error)
@@ -175,7 +173,6 @@ export async function lookupByHash(md5: string, sha1: string): Promise<HasheousL
 export async function getMetadata(igdbId: number): Promise<IGDBGameMetadata | null> {
   try {
     const url = `${HASHEOUS_API}/Metadata/Game/IGDB/${igdbId}`
-    console.log(`Fetching IGDB metadata from: ${url}`)
 
     const response = await fetch(url, {
       method: 'GET',
@@ -184,11 +181,8 @@ export async function getMetadata(igdbId: number): Promise<IGDBGameMetadata | nu
       }
     })
 
-    console.log(`IGDB metadata response status: ${response.status}`)
-
     if (!response.ok) {
       if (response.status === 404) {
-        console.log(`IGDB metadata not found for ID: ${igdbId}`)
         return null
       }
       const text = await response.text()
@@ -197,7 +191,6 @@ export async function getMetadata(igdbId: number): Promise<IGDBGameMetadata | nu
     }
 
     const data = await response.json()
-    console.log('IGDB metadata response:', JSON.stringify(data, null, 2).substring(0, 500))
     return data as IGDBGameMetadata
   } catch (error) {
     console.error('Hasheous metadata error:', error)
@@ -274,7 +267,6 @@ export async function downloadBackdrop(imageId: string, gameId: string): Promise
 async function downloadHasheousImage(imageHash: string, gameId: string, suffix: string = ''): Promise<string | null> {
   try {
     const imageUrl = `${HASHEOUS_API}/images/${imageHash}`
-    console.log(`Downloading Hasheous image from: ${imageUrl}`)
 
     const response = await fetch(imageUrl)
     if (!response.ok) {
@@ -304,8 +296,6 @@ async function downloadHasheousImage(imageHash: string, gameId: string, suffix: 
  * Use Hasheous response data directly when IGDB lookup fails
  */
 async function useHasheousDataDirectly(gameId: string, lookupResult: HasheousLookupResult): Promise<ScrapeResult> {
-  console.log(`Using Hasheous data directly for game ID: ${gameId}`)
-
   const updateData: Partial<GameRecord> = {}
 
   // Get title from Hasheous
@@ -344,11 +334,10 @@ async function useHasheousDataDirectly(gameId: string, lookupResult: HasheousLoo
     }
   }
 
-  if (Object.keys(updateData).length > 0) {
-    updateGame(gameId, updateData)
-    console.log(`Updated game with Hasheous data: ${updateData.title || 'unknown'}`)
-    return { gameId, success: true, matched: true, title: updateData.title }
-  }
+    if (Object.keys(updateData).length > 0) {
+      updateGame(gameId, updateData)
+      return { gameId, success: true, matched: true, title: updateData.title }
+    }
 
   return { gameId, success: true, matched: false }
 }
@@ -363,24 +352,13 @@ export async function scrapeGame(gameId: string): Promise<ScrapeResult> {
   }
 
   try {
-    // Check file size - warn for large files (>500MB)
-    const stats = fs.statSync(game.path)
-    const fileSizeMB = stats.size / (1024 * 1024)
-
-    if (fileSizeMB > 500) {
-      console.log(`Large file detected (${fileSizeMB.toFixed(0)}MB): ${game.title}`)
-    }
-
     // Calculate hash
-    console.log(`Calculating hash for: ${game.title}`)
     const hashes = await calculateFileHash(game.path)
 
     // Look up by hash
-    console.log(`Looking up hash: MD5=${hashes.md5}`)
     const lookupResult = await lookupByHash(hashes.md5, hashes.sha1)
 
     if (!lookupResult) {
-      console.log(`No match found for: ${game.title}`)
       return { gameId, success: true, matched: false }
     }
 
@@ -389,25 +367,21 @@ export async function scrapeGame(gameId: string): Promise<ScrapeResult> {
     if (!igdbMetadata || !igdbMetadata.immutableId) {
       // If no IGDB metadata but we have a name from the hash match, use that
       if (lookupResult.name) {
-        console.log(`Hash matched but no IGDB metadata. Using name: ${lookupResult.name}`)
         updateGame(gameId, { title: lookupResult.name })
         return { gameId, success: true, matched: true, title: lookupResult.name }
       }
-      console.log(`No IGDB metadata found for: ${game.title}`)
       return { gameId, success: true, matched: false }
     }
 
     // Use immutableId which contains the actual IGDB game ID (id field is a slug)
     const immutableId = igdbMetadata.immutableId
     const igdbId = typeof immutableId === 'string' ? parseInt(immutableId, 10) : immutableId
-    console.log(`Found IGDB ID: ${igdbId} (from immutableId: ${immutableId})`)
 
     // Get full metadata from IGDB
     const metadata = await getMetadata(igdbId)
 
     if (metadata) {
       // IGDB metadata found - use it
-      console.log(`Got IGDB metadata for: ${metadata.name}`)
 
       // Extract developer and publisher
       let developer: string | undefined
@@ -466,12 +440,10 @@ export async function scrapeGame(gameId: string): Promise<ScrapeResult> {
 
       updateGame(gameId, updateData)
 
-      console.log(`Successfully scraped metadata for: ${metadata.name}`)
       return { gameId, success: true, matched: true, title: metadata.name }
     }
 
     // IGDB failed - fall back to Hasheous data directly
-    console.log(`IGDB metadata not found, using Hasheous data directly`)
     return await useHasheousDataDirectly(gameId, lookupResult)
 
   } catch (error) {
@@ -493,7 +465,6 @@ export async function scrapeGames(
 
   for (let i = 0; i < gameIds.length; i++) {
     if (scrapeCancelled) {
-      console.log('Scrape cancelled by user')
       break
     }
 
