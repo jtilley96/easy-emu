@@ -47,18 +47,49 @@ export default function Sidebar() {
   const navigate = useNavigate()
   const [focusedIndex, setFocusedIndex] = useState(0)
 
+  // Helper function to determine if a nav item is active
+  const isItemActive = useCallback((item: NavItem): boolean => {
+    const { pathname, search } = location
+    
+    // Parse query params
+    const searchParams = new URLSearchParams(search)
+    const filter = searchParams.get('filter')
+    
+    // Library: active when pathname is '/' and no filter (or filter is not recent/favorites)
+    if (item.to === '/') {
+      return pathname === '/' && filter !== 'recent' && filter !== 'favorites'
+    }
+    
+    // Systems: active when pathname starts with '/systems'
+    if (item.to === '/systems') {
+      return pathname.startsWith('/systems')
+    }
+    
+    // Recently Played: active when pathname is '/' and filter is 'recent'
+    if (item.to === '/?filter=recent') {
+      return pathname === '/' && filter === 'recent'
+    }
+    
+    // Favorites: active when pathname is '/' and filter is 'favorites'
+    if (item.to === '/?filter=favorites') {
+      return pathname === '/' && filter === 'favorites'
+    }
+    
+    // Settings: active when pathname starts with '/settings'
+    if (item.to === '/settings') {
+      return pathname.startsWith('/settings')
+    }
+    
+    return false
+  }, [location])
+
   // Update focused index based on current route
   useEffect(() => {
-    const currentIndex = NAV_ITEMS.findIndex(item => {
-      if (item.to === '/') {
-        return location.pathname === '/'
-      }
-      return location.pathname.startsWith(item.to)
-    })
+    const currentIndex = NAV_ITEMS.findIndex(item => isItemActive(item))
     if (currentIndex >= 0) {
       setFocusedIndex(currentIndex)
     }
-  }, [location.pathname])
+  }, [location.pathname, location.search, isItemActive])
 
   const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
     if (direction === 'up') {
@@ -97,12 +128,11 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-1">
         {NAV_ITEMS.slice(0, 2).map((item, index) => {
-          const isActive = location.pathname === item.to || (item.to === '/' && location.pathname === '/')
           return (
             <NavItemComponent
               key={item.to}
               item={item}
-              isActive={isActive}
+              isActive={isItemActive(item)}
               isFocused={focusedIndex === index}
             />
           )
@@ -116,12 +146,11 @@ export default function Sidebar() {
 
         {NAV_ITEMS.slice(2, 4).map((item, index) => {
           const actualIndex = index + 2
-          const isActive = location.pathname.startsWith(item.to) || location.search.includes(item.to.split('?')[1]?.split('=')[0] || '')
           return (
             <NavItemComponent
               key={item.to}
               item={item}
-              isActive={isActive}
+              isActive={isItemActive(item)}
               isFocused={focusedIndex === actualIndex}
             />
           )
@@ -132,12 +161,11 @@ export default function Sidebar() {
       <div className="p-3 border-t border-surface-800">
         {NAV_ITEMS.slice(4).map((item, index) => {
           const actualIndex = index + 4
-          const isActive = location.pathname.startsWith(item.to)
           return (
             <NavItemComponent
               key={item.to}
               item={item}
-              isActive={isActive}
+              isActive={isItemActive(item)}
               isFocused={focusedIndex === actualIndex}
             />
           )
