@@ -2,6 +2,7 @@ import { registerConfigHandlers, loadConfig } from './config'
 import { registerLibraryHandlers, initDatabase } from './library'
 import { registerEmulatorHandlers } from './emulators'
 import { registerMetadataHandlers } from './metadata'
+import { registerBiosHandlers } from './bios'
 
 export function initializeServices(): void {
   // Load configuration first
@@ -15,6 +16,7 @@ export function initializeServices(): void {
   registerLibraryHandlers()
   registerEmulatorHandlers()
   registerMetadataHandlers()
+  registerBiosHandlers()
 }
 
 export { loadConfig, getConfigValue, setConfigValue } from './config'

@@ -111,6 +111,10 @@ ipcMain.handle('shell:showItemInFolder', (_event, filePath: string) => {
   shell.showItemInFolder(filePath)
 })
 
+ipcMain.handle('shell:openExternal', async (_event, url: string) => {
+  return shell.openExternal(url)
+})
+
 // App info
 ipcMain.handle('app:getPath', (_event, name: 'userData' | 'home' | 'appData' | 'documents') => {
   return app.getPath(name)

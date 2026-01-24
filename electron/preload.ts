@@ -24,7 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Shell
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
-    showItemInFolder: (path: string) => ipcRenderer.invoke('shell:showItemInFolder', path)
+    showItemInFolder: (path: string) => ipcRenderer.invoke('shell:showItemInFolder', path),
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
   },
 
   // App
@@ -68,6 +69,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     get: (key: string) => ipcRenderer.invoke('config:get', key),
     set: (key: string, value: unknown) => ipcRenderer.invoke('config:set', key, value),
     getAll: () => ipcRenderer.invoke('config:getAll')
+  },
+
+  // BIOS operations
+  bios: {
+    getDefinitions: () => ipcRenderer.invoke('bios:getDefinitions'),
+    checkStatus: () => ipcRenderer.invoke('bios:checkStatus'),
+    setPath: (biosId: string, path: string) => ipcRenderer.invoke('bios:setPath', biosId, path)
   }
 })
 
@@ -87,6 +95,7 @@ export interface ElectronAPI {
   shell: {
     openPath: (path: string) => Promise<string>
     showItemInFolder: (path: string) => void
+    openExternal: (url: string) => Promise<void>
   }
   app: {
     getPath: (name: 'userData' | 'home' | 'appData' | 'documents') => Promise<string>
@@ -116,6 +125,11 @@ export interface ElectronAPI {
     set: (key: string, value: unknown) => Promise<void>
     getAll: () => Promise<Record<string, unknown>>
   }
+  bios: {
+    getDefinitions: () => Promise<BiosDefinition[]>
+    checkStatus: () => Promise<BiosStatus[]>
+    setPath: (biosId: string, path: string) => Promise<BiosStatus[]>
+  }
 }
 
 interface Game {
@@ -131,9 +145,30 @@ interface Game {
 interface EmulatorInfo {
   id: string
   name: string
-  path: string
+  path: string | null
   platforms: string[]
   installed: boolean
+  canInstall: boolean
+  downloadUrl: string | null
+}
+
+interface BiosDefinition {
+  id: string
+  name: string
+  description: string
+  platform: string
+  required: boolean
+  filenames: string[]
+}
+
+interface BiosStatus {
+  id: string
+  name: string
+  description: string
+  platform: string
+  required: boolean
+  found: boolean
+  path: string | null
 }
 
 interface GameMetadata {

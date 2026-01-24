@@ -163,7 +163,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
     },
     launchArgs: (romPath: string) => [romPath],
     canInstall: true,
-    downloadUrl: 'https://ryujinx.org/download'
+    downloadUrl: 'https://github.com/GreemDev/Ryubing/releases'
   },
   {
     id: 'ppsspp',
@@ -235,15 +235,20 @@ export function detectAllEmulators(): Array<{
   platforms: string[]
   installed: boolean
   canInstall: boolean
+  downloadUrl: string | null
 }> {
-  return EMULATOR_DEFINITIONS.map(def => ({
-    id: def.id,
-    name: def.name,
-    path: detectEmulator(def),
-    platforms: def.platforms,
-    installed: detectEmulator(def) !== null,
-    canInstall: def.canInstall
-  }))
+  return EMULATOR_DEFINITIONS.map(def => {
+    const detectedPath = detectEmulator(def)
+    return {
+      id: def.id,
+      name: def.name,
+      path: detectedPath,
+      platforms: def.platforms,
+      installed: detectedPath !== null,
+      canInstall: def.canInstall,
+      downloadUrl: def.downloadUrl || null
+    }
+  })
 }
 
 export function getEmulatorForPlatform(platform: string): EmulatorDefinition | null {

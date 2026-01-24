@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Gamepad2,
   FolderPlus,
@@ -10,7 +10,8 @@ import {
   ChevronLeft,
   Plus,
   Trash2,
-  ExternalLink
+  Loader2,
+  FolderOpen
 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLibraryStore } from '../store/libraryStore'
@@ -29,7 +30,12 @@ const STEPS: { id: WizardStep; label: string }[] = [
 export default function SetupWizard() {
   const [currentStep, setCurrentStep] = useState<WizardStep>('welcome')
   const { setFirstRun } = useAppStore()
-  const { romFolders, addRomFolder, removeRomFolder } = useLibraryStore()
+  const { romFolders, addRomFolder, removeRomFolder, loadLibrary } = useLibraryStore()
+
+  // Load saved ROM folders on mount
+  useEffect(() => {
+    loadLibrary()
+  }, [loadLibrary])
 
   const currentIndex = STEPS.findIndex(s => s.id === currentStep)
 
@@ -222,12 +228,43 @@ function FoldersStep({
 }
 
 function EmulatorsStep() {
-  const detectedEmulators = [
-    { name: 'RetroArch', detected: true, path: 'C:\\RetroArch' },
-    { name: 'DuckStation', detected: true, path: 'C:\\DuckStation' },
-    { name: 'Dolphin', detected: false, path: null },
-    { name: 'PCSX2', detected: false, path: null }
-  ]
+  const [emulators, setEmulators] = useState<EmulatorInfo[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const detectEmulators = async () => {
+      try {
+        const results = await window.electronAPI.emulators.detect()
+        // Sort: installed first, then alphabetically
+        const sorted = [...results].sort((a, b) => {
+          if (a.installed !== b.installed) return a.installed ? -1 : 1
+          return a.name.localeCompare(b.name)
+        })
+        setEmulators(sorted)
+      } catch (error) {
+        console.error('Failed to detect emulators:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    detectEmulators()
+  }, [])
+
+  const handleBrowse = async (emulatorId: string) => {
+    const path = await window.electronAPI.dialog.openFile([
+      { name: 'Executable', extensions: ['exe', 'app', ''] }
+    ])
+    if (path) {
+      await window.electronAPI.emulators.configure(emulatorId, { path })
+      // Re-detect to update the list
+      const results = await window.electronAPI.emulators.detect()
+      const sorted = [...results].sort((a, b) => {
+        if (a.installed !== b.installed) return a.installed ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+      setEmulators(sorted)
+    }
+  }
 
   return (
     <div>
@@ -239,45 +276,113 @@ function EmulatorsStep() {
         </p>
       </div>
 
-      <div className="space-y-3">
-        {detectedEmulators.map(emu => (
-          <div
-            key={emu.name}
-            className={`flex items-center justify-between p-4 rounded-lg ${
-              emu.detected ? 'bg-green-500/10 border border-green-500/30' : 'bg-surface-800'
-            }`}
-          >
-            <div>
-              <h3 className="font-semibold">{emu.name}</h3>
-              {emu.path && (
-                <p className="text-sm text-surface-400 font-mono">{emu.path}</p>
-              )}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 size={48} className="animate-spin text-accent mb-4" />
+          <p className="text-surface-400">Scanning for emulators...</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {emulators.map(emu => (
+            <div
+              key={emu.id}
+              className={`flex items-center justify-between p-4 rounded-lg ${
+                emu.installed ? 'bg-green-500/10 border border-green-500/30' : 'bg-surface-800'
+              }`}
+            >
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold">{emu.name}</h3>
+                {emu.path && (
+                  <p className="text-sm text-surface-400 font-mono truncate">{emu.path}</p>
+                )}
+                <p className="text-xs text-surface-500">{emu.platforms.join(', ')}</p>
+              </div>
+              <div className="flex items-center gap-3 ml-4">
+                <span className={`flex items-center gap-1 ${
+                  emu.installed ? 'text-green-400' : 'text-surface-400'
+                }`}>
+                  {emu.installed ? (
+                    <>
+                      <Check size={18} />
+                      Detected
+                    </>
+                  ) : (
+                    'Not Found'
+                  )}
+                </span>
+                <button
+                  onClick={() => handleBrowse(emu.id)}
+                  className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm flex items-center gap-1"
+                >
+                  <FolderOpen size={14} />
+                  Browse
+                </button>
+              </div>
             </div>
-            <span className={`flex items-center gap-1 ${
-              emu.detected ? 'text-green-400' : 'text-surface-400'
-            }`}>
-              {emu.detected ? (
-                <>
-                  <Check size={18} />
-                  Detected
-                </>
-              ) : (
-                'Not Found'
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 function MissingStep() {
-  const missingEmulators = [
-    { name: 'Dolphin', description: 'GameCube / Wii emulator', canInstall: true },
-    { name: 'PCSX2', description: 'PlayStation 2 emulator', canInstall: true },
-    { name: 'RPCS3', description: 'PlayStation 3 emulator', canInstall: true }
-  ]
+  const [missingEmulators, setMissingEmulators] = useState<EmulatorInfo[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadMissing = async () => {
+      try {
+        const results = await window.electronAPI.emulators.detect()
+        const missing = results.filter(e => !e.installed)
+        setMissingEmulators(missing)
+      } catch (error) {
+        console.error('Failed to detect emulators:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadMissing()
+  }, [])
+
+  const handleDownload = async (url: string) => {
+    await window.electronAPI.shell.openExternal(url)
+  }
+
+  const handleBrowse = async (emulatorId: string) => {
+    const path = await window.electronAPI.dialog.openFile([
+      { name: 'Executable', extensions: ['exe', 'app', ''] }
+    ])
+    if (path) {
+      await window.electronAPI.emulators.configure(emulatorId, { path })
+      // Re-detect to update the list
+      const results = await window.electronAPI.emulators.detect()
+      const missing = results.filter(e => !e.installed)
+      setMissingEmulators(missing)
+    }
+  }
+
+  const getPlatformDescription = (platforms: string[]): string => {
+    const platformNames: Record<string, string> = {
+      nes: 'NES',
+      snes: 'SNES',
+      n64: 'N64',
+      gb: 'Game Boy',
+      gbc: 'Game Boy Color',
+      gba: 'GBA',
+      nds: 'Nintendo DS',
+      gamecube: 'GameCube',
+      wii: 'Wii',
+      switch: 'Switch',
+      genesis: 'Genesis',
+      ps1: 'PlayStation',
+      ps2: 'PS2',
+      ps3: 'PS3',
+      psp: 'PSP',
+      arcade: 'Arcade'
+    }
+    return platforms.map(p => platformNames[p] || p).join(' / ')
+  }
 
   return (
     <div>
@@ -285,41 +390,85 @@ function MissingStep() {
         <Download size={48} className="mx-auto mb-4 text-accent" />
         <h2 className="text-3xl font-bold mb-4">Install Missing Emulators</h2>
         <p className="text-surface-300">
-          Would you like to install any missing emulators? You can skip this and install them later.
+          Download emulators or browse to locate them manually.
         </p>
       </div>
 
-      <div className="space-y-3">
-        {missingEmulators.map(emu => (
-          <div
-            key={emu.name}
-            className="flex items-center justify-between bg-surface-800 p-4 rounded-lg"
-          >
-            <div>
-              <h3 className="font-semibold">{emu.name}</h3>
-              <p className="text-sm text-surface-400">{emu.description}</p>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 size={48} className="animate-spin text-accent mb-4" />
+          <p className="text-surface-400">Checking emulators...</p>
+        </div>
+      ) : missingEmulators.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 bg-green-500/10 border border-green-500/30 rounded-lg">
+          <Check size={48} className="text-green-400 mb-4" />
+          <h3 className="text-xl font-semibold text-green-400 mb-2">All Emulators Detected!</h3>
+          <p className="text-surface-300">You have all supported emulators installed.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {missingEmulators.map(emu => (
+            <div
+              key={emu.id}
+              className="flex items-center justify-between bg-surface-800 p-4 rounded-lg"
+            >
+              <div>
+                <h3 className="font-semibold">{emu.name}</h3>
+                <p className="text-sm text-surface-400">{getPlatformDescription(emu.platforms)}</p>
+              </div>
+              <div className="flex gap-2">
+                {emu.downloadUrl && (
+                  <button
+                    onClick={() => handleDownload(emu.downloadUrl!)}
+                    className="px-4 py-2 bg-accent hover:bg-accent-hover rounded text-sm flex items-center gap-2"
+                  >
+                    <Download size={16} />
+                    Download
+                  </button>
+                )}
+                <button
+                  onClick={() => handleBrowse(emu.id)}
+                  className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded text-sm flex items-center gap-2"
+                >
+                  <FolderOpen size={16} />
+                  Browse
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button className="px-4 py-2 bg-accent hover:bg-accent-hover rounded text-sm">
-                Install
-              </button>
-              <button className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded text-sm">
-                <ExternalLink size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 function BiosStep() {
-  const biosFiles = [
-    { name: 'PS1 BIOS', required: true, found: false },
-    { name: 'PS2 BIOS', required: true, found: false },
-    { name: 'GBA BIOS', required: false, found: true }
-  ]
+  const [biosFiles, setBiosFiles] = useState<BiosStatus[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadBiosStatus = async () => {
+      try {
+        const status = await window.electronAPI.bios.checkStatus()
+        setBiosFiles(status)
+      } catch (error) {
+        console.error('Failed to load BIOS status:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadBiosStatus()
+  }, [])
+
+  const handleBrowse = async (biosId: string) => {
+    const path = await window.electronAPI.dialog.openFile([
+      { name: 'BIOS Files', extensions: ['bin', 'rom', 'BIN', 'ROM'] }
+    ])
+    if (path) {
+      const updatedStatus = await window.electronAPI.bios.setPath(biosId, path)
+      setBiosFiles(updatedStatus)
+    }
+  }
 
   return (
     <div>
@@ -335,33 +484,61 @@ function BiosStep() {
         BIOS files are copyrighted and cannot be included with EasyEmu. You'll need to dump them from your own hardware.
       </div>
 
-      <div className="space-y-3">
-        {biosFiles.map(bios => (
-          <div
-            key={bios.name}
-            className={`flex items-center justify-between p-4 rounded-lg ${
-              bios.found ? 'bg-green-500/10 border border-green-500/30' : 'bg-surface-800'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <h3 className="font-semibold">{bios.name}</h3>
-              {bios.required && (
-                <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded">
-                  Required
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 size={48} className="animate-spin text-accent mb-4" />
+          <p className="text-surface-400">Checking BIOS files...</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {biosFiles.map(bios => (
+            <div
+              key={bios.id}
+              className={`flex items-center justify-between p-4 rounded-lg ${
+                bios.found ? 'bg-green-500/10 border border-green-500/30' : 'bg-surface-800'
+              }`}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-semibold">{bios.name}</h3>
+                  {bios.required ? (
+                    <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded">
+                      Required
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 bg-surface-600 text-surface-300 rounded">
+                      Optional
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-surface-400">{bios.description}</p>
+                {bios.path && (
+                  <p className="text-xs text-surface-500 font-mono truncate mt-1">{bios.path}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-3 ml-4">
+                <span className={`flex items-center gap-1 ${bios.found ? 'text-green-400' : 'text-surface-400'}`}>
+                  {bios.found ? (
+                    <>
+                      <Check size={16} />
+                      Found
+                    </>
+                  ) : (
+                    'Missing'
+                  )}
                 </span>
-              )}
+                <button
+                  onClick={() => handleBrowse(bios.id)}
+                  className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm flex items-center gap-1"
+                >
+                  <FolderOpen size={14} />
+                  Browse
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className={bios.found ? 'text-green-400' : 'text-surface-400'}>
-                {bios.found ? 'Found' : 'Missing'}
-              </span>
-              <button className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm">
-                Browse
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
