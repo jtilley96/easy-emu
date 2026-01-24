@@ -104,7 +104,7 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
       // Use first available gamepad
       const gamepad = gamepads[0]
       const store = useInputStore.getState()
-      const { isBigPictureMode, setBigPictureMode, setActiveGamepad, activeGamepadIndex } = store
+      const { setBigPictureMode, setActiveGamepad, activeGamepadIndex } = store
 
       // Ensure activeGamepadIndex is set
       if (activeGamepadIndex === null) {

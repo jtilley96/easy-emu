@@ -377,7 +377,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
     const gamepadIndexRef = useRef<number | null>(null)
 
     const { loadSRAM, saveSRAM: saveSRAMToBackend } = useEmulatorStore()
-    const { gamepads, activeGamepadIndex } = useInputStore()
 
     // Initialize emulator
     const initializeEmulator = useCallback(async () => {
