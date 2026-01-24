@@ -23,6 +23,16 @@ export interface AppConfig {
   embeddedIntegerScaling: boolean
   embeddedAutoSave: boolean
   embeddedAutoSaveInterval: number // seconds
+  // Controller settings
+  controllerMappings: Record<string, unknown>
+  keyboardShortcuts: Record<string, string>
+  analogDeadzone: number
+  dpadRepeatDelay: number
+  dpadRepeatRate: number
+  // Big Picture settings
+  bigPictureModeEnabled: boolean
+  bigPictureOnStartup: boolean
+  bigPictureCardSize: 'small' | 'medium' | 'large'
 }
 
 const CONFIG_FILE = 'config.json'
@@ -55,7 +65,17 @@ function getDefaultConfig(): AppConfig {
     embeddedShader: 'none',
     embeddedIntegerScaling: true,
     embeddedAutoSave: true,
-    embeddedAutoSaveInterval: 60
+    embeddedAutoSaveInterval: 60,
+    // Controller defaults
+    controllerMappings: {},
+    keyboardShortcuts: {},
+    analogDeadzone: 0.15,
+    dpadRepeatDelay: 400,
+    dpadRepeatRate: 100,
+    // Big Picture defaults
+    bigPictureModeEnabled: false,
+    bigPictureOnStartup: false,
+    bigPictureCardSize: 'medium'
   }
 }
 

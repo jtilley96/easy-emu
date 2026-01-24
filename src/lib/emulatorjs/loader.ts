@@ -185,7 +185,9 @@ export class EmulatorLoader {
   }
 
   resume(): void {
-    window.EJS_emulator?.resume()
+    const emu = window.EJS_emulator
+    if (emu?.resume) emu.resume()
+    else if (emu?.play) emu.play()
   }
 
   setVolume(volume: number): void {
@@ -201,11 +203,15 @@ export class EmulatorLoader {
   }
 
   enterFullscreen(): void {
-    window.EJS_emulator?.enterFullscreen()
+    const emu = window.EJS_emulator
+    if (emu?.enterFullscreen) emu.enterFullscreen()
+    else if (emu?.fullscreen) emu.fullscreen(true)
   }
 
   exitFullscreen(): void {
-    window.EJS_emulator?.exitFullscreen()
+    const emu = window.EJS_emulator
+    if (emu?.exitFullscreen) emu.exitFullscreen()
+    else if (emu?.fullscreen) emu.fullscreen(false)
   }
 
   get isPaused(): boolean {

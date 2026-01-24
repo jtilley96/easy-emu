@@ -26,6 +26,33 @@ export default {
           hover: '#4f46e5',
           muted: '#4338ca',
         }
+      },
+      animation: {
+        'focus-pulse': 'focus-pulse 1.5s ease-in-out infinite',
+        'slide-up': 'slide-up 200ms ease-out',
+        'slide-in-right': 'slide-in-right 200ms ease-out',
+        'fade-in': 'fade-in 200ms ease-out',
+      },
+      keyframes: {
+        'focus-pulse': {
+          '0%, 100%': { boxShadow: '0 0 0 2px rgba(99, 102, 241, 0.5)' },
+          '50%': { boxShadow: '0 0 0 4px rgba(99, 102, 241, 0.8)' },
+        },
+        'slide-up': {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'slide-in-right': {
+          '0%': { opacity: '0', transform: 'translateX(20px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+      },
+      scale: {
+        '102': '1.02',
       }
     },
   },

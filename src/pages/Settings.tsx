@@ -25,6 +25,7 @@ import { useAppStore } from '../store/appStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import CoreManagerSection from '../components/settings/CoreManagerSection'
+import ControllersSettings from '../components/settings/ControllersSettings'
 import { EmulatorInfo } from '../types'
 
 interface BiosStatus {
@@ -755,32 +756,6 @@ function MetadataSettings() {
           You can manually edit game metadata, including title, cover art, and backdrop images, 
           by clicking the Edit button on any game's details page.
         </p>
-      </section>
-    </div>
-  )
-}
-
-// Controllers Settings Section
-function ControllersSettings() {
-  return (
-    <div>
-      <h2 className="text-2xl font-bold mb-6">Controller Settings</h2>
-
-      <section className="mb-8">
-        <h3 className="text-lg font-semibold mb-4">Detected Controllers</h3>
-        <div className="bg-surface-800 rounded-lg p-4 text-center text-surface-400">
-          No controllers detected. Connect a controller to configure it.
-        </div>
-      </section>
-
-      <section>
-        <h3 className="text-lg font-semibold mb-4">Global Mappings</h3>
-        <p className="text-surface-400 mb-4">
-          Configure keyboard shortcuts and controller mappings for app navigation.
-        </p>
-        <button className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg">
-          Configure Mappings
-        </button>
       </section>
     </div>
   )

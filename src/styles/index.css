@@ -83,3 +83,62 @@ input:focus-visible {
 .animate-slide-in {
   animation: slide-in 0.2s ease-out;
 }
+
+/* Big Picture mode focus animation */
+@keyframes focus-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.5); }
+  50% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.8); }
+}
+
+.bp-focus {
+  animation: focus-pulse 1.5s ease-in-out infinite;
+}
+
+/* Big Picture game card transitions */
+.bp-game-card {
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.bp-game-card:focus {
+  outline: none;
+  transform: scale(1.05);
+  box-shadow: 0 0 0 3px #6366f1, 0 10px 40px rgba(0,0,0,0.3);
+}
+
+/* Page transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+.page-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.page-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+/* Smooth scroll behavior for Big Picture grids */
+.bp-scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbars in Big Picture mode but keep functionality */
+.bp-hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.bp-hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -32,13 +32,23 @@ export interface EmulatorJSConfig {
   onError?: (error: Error) => void
 }
 
+export interface EmulatorJSGameManager {
+  getState?: () => Uint8Array
+  setState?: (data: Uint8Array) => void
+  getSRAM?: () => ArrayBuffer
+  pause?: () => void
+  play?: () => void
+}
+
 export interface EmulatorJSInstance {
   // Control methods
   start: () => void
   pause: () => void
-  resume: () => void
+  resume?: () => void
   restart: () => void
   stop: () => void
+  exit?: () => void
+  play?: () => void
 
   // State methods
   saveState: () => Promise<ArrayBuffer>
@@ -49,13 +59,39 @@ export interface EmulatorJSInstance {
   setVolume: (volume: number) => void
   mute: () => void
   unmute: () => void
-  enterFullscreen: () => void
-  exitFullscreen: () => void
+  enterFullscreen?: () => void
+  exitFullscreen?: () => void
+  fullscreen?: (enable: boolean) => void
   screenshot: () => Promise<ArrayBuffer>
 
   // Properties
-  isPaused: boolean
-  isRunning: boolean
+  isPaused?: boolean
+  isRunning?: boolean
+  paused?: boolean
+  started?: boolean
+  canvas?: HTMLCanvasElement
+
+  // Internal game manager
+  gameManager?: EmulatorJSGameManager
+}
+
+// EmulatorJS button visibility config
+export interface EmulatorJSButtons {
+  playPause?: boolean
+  restart?: boolean
+  mute?: boolean
+  settings?: boolean
+  fullscreen?: boolean
+  saveState?: boolean
+  loadState?: boolean
+  screenRecord?: boolean
+  gamepad?: boolean
+  cheat?: boolean
+  volume?: boolean
+  quickSave?: boolean
+  quickLoad?: boolean
+  screenshot?: boolean
+  cacheManager?: boolean
 }
 
 // EmulatorJS global type (when loaded via script tag)
@@ -71,7 +107,8 @@ declare global {
     EJS_startOnLoaded?: boolean
     EJS_volume?: number
     EJS_color?: string
-    EJS_defaultControls?: boolean
+    EJS_defaultControls?: Record<number, Record<number, { value: string; value2: string }>>
+    EJS_Buttons?: EmulatorJSButtons
     EJS_onGameStart?: () => void
     EJS_onSaveState?: (data: ArrayBuffer) => void
     EJS_onLoadState?: (slot: number) => Promise<ArrayBuffer | null>
