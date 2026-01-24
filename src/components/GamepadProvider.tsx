@@ -80,12 +80,14 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
     const service = getGamepadService()
     let animationFrameId: number
     let previousStartPressed = false
+    let isProcessingStart = false  // Prevent multiple rapid presses
 
     const poll = () => {
       // Skip global shortcuts during emulation - let the emulator handle inputs
       const isInEmulator = window.location.hash.includes('/play/')
       if (isInEmulator) {
         previousStartPressed = false  // Reset state when entering emulator
+        isProcessingStart = false
         animationFrameId = requestAnimationFrame(poll)
         return
       }
@@ -94,6 +96,7 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
       const gamepads = service.getGamepads()
       if (gamepads.length === 0) {
         previousStartPressed = false
+        isProcessingStart = false
         animationFrameId = requestAnimationFrame(poll)
         return
       }
@@ -111,20 +114,42 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
       // Check for Start button to toggle Big Picture - use local just-pressed tracking
       const startPressed = service.isActionPressed(gamepad.index, 'start')
 
-      // Only trigger on button down (not held)
-      if (startPressed && !previousStartPressed) {
-        console.log('[GamepadProvider] Start pressed - toggling Big Picture mode')
-        const newMode = !isBigPictureMode
+      // Only trigger on button down (not held) and if not already processing
+      if (startPressed && !previousStartPressed && !isProcessingStart) {
+        // Determine current mode from route, not store (store may be stale)
+        const currentHash = window.location.hash
+        const isCurrentlyInBigPicture = currentHash.includes('/bigpicture')
+        const newMode = !isCurrentlyInBigPicture
+        
+        console.log('[GamepadProvider] Start pressed - toggling Big Picture mode', { isCurrentlyInBigPicture, newMode })
+        isProcessingStart = true
+        
+        // Update state and navigate immediately using the computed newMode
         setBigPictureMode(newMode)
-        // Navigate immediately
+        
+        // Navigate immediately based on computed newMode
         if (newMode) {
           window.location.hash = '#/bigpicture'
         } else {
           window.location.hash = '#/'
         }
+        
+        // Reset previousStartPressed immediately to prevent double-trigger
+        previousStartPressed = true
+        
+        // Reset processing flag after a short delay to allow navigation to complete
+        setTimeout(() => {
+          isProcessingStart = false
+        }, 200)
+      } else if (!startPressed) {
+        // Button released - reset tracking
+        previousStartPressed = false
+        isProcessingStart = false
+      } else {
+        // Button still held - keep previousStartPressed true
+        previousStartPressed = startPressed
       }
-
-      previousStartPressed = startPressed
+      
       animationFrameId = requestAnimationFrame(poll)
     }
 

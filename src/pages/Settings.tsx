@@ -68,11 +68,11 @@ export default function Settings() {
       <nav className="w-56 bg-surface-900 border-r border-surface-800 p-4">
         <h2 className="text-lg font-semibold mb-4">Settings</h2>
         <ul className="space-y-1">
-          {NAV_ITEMS.map(item => (
+          {NAV_ITEMS.map((item) => (
             <li key={item.id}>
               <button
                 onClick={() => navigate(`/settings/${item.id}`)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all ${
                   currentSection === item.id
                     ? 'bg-accent text-white'
                     : 'hover:bg-surface-800 text-surface-300'
@@ -168,19 +168,21 @@ function LibrarySettings() {
         <div className="flex gap-3">
           <button
             onClick={handleAddFolder}
-            className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg"
+            className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-all"
           >
             <Plus size={18} />
             Add Folder
           </button>
-          <button
-            onClick={handleScan}
-            disabled={isScanning || romFolders.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw size={18} className={isScanning ? 'spinner' : ''} />
-            {isScanning ? 'Scanning...' : 'Rescan Library'}
-          </button>
+          {romFolders.length > 0 && (
+            <button
+              onClick={handleScan}
+              disabled={isScanning || romFolders.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw size={18} className={isScanning ? 'spinner' : ''} />
+              {isScanning ? 'Scanning...' : 'Rescan Library'}
+            </button>
+          )}
         </div>
       </section>
     </div>

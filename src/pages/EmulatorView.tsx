@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import EmulatorCanvas, { EmulatorCanvasRef } from '../components/emulator/EmulatorCanvas'
 import EmulatorHUD from '../components/emulator/EmulatorHUD'
 import SaveStateModal from '../components/emulator/SaveStateModal'
+import EmulatorMenuModal from '../components/emulator/EmulatorMenuModal'
 import { useEmulatorStore } from '../store/emulatorStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
+import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 
 export default function EmulatorView() {
   const { gameId } = useParams<{ gameId: string }>()
@@ -26,6 +28,7 @@ export default function EmulatorView() {
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [saveModalMode, setSaveModalMode] = useState<'save' | 'load'>('save')
+  const [menuModalOpen, setMenuModalOpen] = useState(false)
   const [sessionStartTime] = useState(Date.now())
 
   const hideHUDTimeout = useRef<NodeJS.Timeout | null>(null)
@@ -93,6 +96,21 @@ export default function EmulatorView() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isPaused])
 
+  // Handle select button to open menu
+  const handleSelect = useCallback(() => {
+    if (!menuModalOpen && !saveModalOpen && !isLoading) {
+      setMenuModalOpen(true)
+      emulatorRef.current?.pause()
+      setIsPaused(true)
+    }
+  }, [menuModalOpen, saveModalOpen, isLoading])
+
+  // Gamepad navigation for select button
+  useGamepadNavigation({
+    enabled: !menuModalOpen && !saveModalOpen && !isLoading,
+    onStart: handleSelect
+  })
+
   // Auto-hide HUD after inactivity
   useEffect(() => {
     const handleMouseMove = () => {
@@ -101,7 +119,7 @@ export default function EmulatorView() {
         clearTimeout(hideHUDTimeout.current)
       }
       hideHUDTimeout.current = setTimeout(() => {
-        if (!isPaused && !saveModalOpen) {
+        if (!isPaused && !saveModalOpen && !menuModalOpen) {
           setShowHUD(false)
         }
       }, 3000)
@@ -114,7 +132,7 @@ export default function EmulatorView() {
         clearTimeout(hideHUDTimeout.current)
       }
     }
-  }, [isPaused, saveModalOpen])
+  }, [isPaused, saveModalOpen, menuModalOpen])
 
   // Handle fullscreen changes
   useEffect(() => {
@@ -189,6 +207,15 @@ export default function EmulatorView() {
 
   const closeSaveModal = () => {
     setSaveModalOpen(false)
+  }
+
+  const closeMenuModal = () => {
+    setMenuModalOpen(false)
+    // Resume emulator when menu closes (unless paused for another reason)
+    if (!saveModalOpen) {
+      emulatorRef.current?.resume()
+      setIsPaused(false)
+    }
   }
 
   const handleSaveState = async (slot: number) => {
@@ -344,6 +371,25 @@ export default function EmulatorView() {
           onLoad={handleLoadState}
         />
       )}
+
+      {/* Menu modal */}
+      <EmulatorMenuModal
+        isOpen={menuModalOpen}
+        onClose={closeMenuModal}
+        isPaused={isPaused}
+        onSaveState={openSaveModal}
+        onLoadState={openLoadModal}
+        onScreenshot={handleScreenshot}
+        onPause={() => {
+          emulatorRef.current?.pause()
+          setIsPaused(true)
+        }}
+        onResume={() => {
+          emulatorRef.current?.resume()
+          setIsPaused(false)
+        }}
+        onExit={handleExit}
+      />
     </div>
   )
 }

@@ -432,6 +432,7 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         }
 
         // Detect connected gamepad for auto-selection
+        // Use the user's physical controller (Xbox/PlayStation/Nintendo) - not platform-specific
         const inputStore = useInputStore.getState()
         const connectedGamepads = inputStore.gamepads.filter(g => g.connected)
         const gamepadToUse = inputStore.activeGamepadIndex !== null
@@ -440,15 +441,21 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         
         if (gamepadToUse) {
           gamepadIndexRef.current = gamepadToUse.index
-          console.log(`[EmulatorCanvas] Gamepad detected: ${gamepadToUse.name} (index: ${gamepadToUse.index})`)
+          console.log(`[EmulatorCanvas] Gamepad detected: ${gamepadToUse.name} (index: ${gamepadToUse.index}, type: ${gamepadToUse.type})`)
+          console.log(`[EmulatorCanvas] Using physical controller layout: ${gamepadToUse.type} (not platform-specific)`)
           
           // Set gamepad preference BEFORE EmulatorJS initializes
           // This way EmulatorJS might pick it up automatically on load
+          // Note: EmulatorJS will handle button mapping internally, but we ensure the correct
+          // physical controller is selected so the user's controller layout is used
           try {
             localStorage.setItem('EJS_gamepad', String(gamepadToUse.index))
             localStorage.setItem('EJS_controller', String(gamepadToUse.index))
             localStorage.setItem('gamepad', String(gamepadToUse.index))
             localStorage.setItem('controller', String(gamepadToUse.index))
+            
+            // Store controller type info for reference (EmulatorJS may not use this directly)
+            localStorage.setItem('EJS_controllerType', gamepadToUse.type)
             
             // Also try EJS_STORAGE if it exists
             if (window.EJS_STORAGE && typeof window.EJS_STORAGE === 'object') {
@@ -458,6 +465,7 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
                 storage.setItem('controller', String(gamepadToUse.index))
                 storage.setItem('EJS_gamepad', String(gamepadToUse.index))
                 storage.setItem('EJS_controller', String(gamepadToUse.index))
+                storage.setItem('EJS_controllerType', gamepadToUse.type)
               }
             }
             console.log('[EmulatorCanvas] Set gamepad preference in storage before EmulatorJS init')
@@ -484,8 +492,12 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         window.EJS_color = '#6366f1'
 
         // Enable gamepad support in toolbar
-        // Note: EJS_defaultControls causes crashes in EmulatorJS - controller
-        // configuration is done via the in-game settings menu (gamepad button)
+        // Note: EJS_defaultControls is not set here as it can cause crashes in EmulatorJS.
+        // Controller configuration is done via the in-game settings menu (gamepad button).
+        // The user's physical controller (Xbox/PlayStation/Nintendo) will be auto-selected,
+        // and EmulatorJS will handle button mapping internally. The controller layout shown
+        // in EmulatorJS settings may reflect the emulated platform, but the actual button
+        // mapping uses the physical controller's button indices.
         window.EJS_Buttons = {
           playPause: true,
           restart: true,

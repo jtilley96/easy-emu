@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import { useState, useCallback, useEffect } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Library,
   Gamepad2,
@@ -7,32 +8,80 @@ import {
   Star,
   FolderOpen
 } from 'lucide-react'
+import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 
-interface NavItemProps {
+interface NavItem {
   to: string
   icon: React.ReactNode
   label: string
 }
 
-function NavItem({ to, icon, label }: NavItemProps) {
+const NAV_ITEMS: NavItem[] = [
+  { to: '/', icon: <Library size={20} />, label: 'Library' },
+  { to: '/systems', icon: <FolderOpen size={20} />, label: 'Systems' },
+  { to: '/?filter=recent', icon: <Clock size={20} />, label: 'Recently Played' },
+  { to: '/?filter=favorites', icon: <Star size={20} />, label: 'Favorites' },
+  { to: '/settings', icon: <Settings size={20} />, label: 'Settings' }
+]
+
+function NavItemComponent({ item, isActive, isFocused }: { item: NavItem; isActive: boolean; isFocused: boolean }) {
   return (
     <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
-          isActive
-            ? 'bg-accent text-white'
-            : 'text-surface-300 hover:bg-surface-800 hover:text-surface-100'
-        }`
-      }
+      to={item.to}
+      className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all ${
+        isActive
+          ? 'bg-accent text-white'
+          : isFocused
+          ? 'bg-surface-800 text-white scale-[1.02] shadow-lg bp-focus'
+          : 'text-surface-300 hover:bg-surface-800 hover:text-surface-100'
+      }`}
     >
-      {icon}
-      <span className="font-medium">{label}</span>
+      {item.icon}
+      <span className="font-medium">{item.label}</span>
     </NavLink>
   )
 }
 
 export default function Sidebar() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [focusedIndex, setFocusedIndex] = useState(0)
+
+  // Update focused index based on current route
+  useEffect(() => {
+    const currentIndex = NAV_ITEMS.findIndex(item => {
+      if (item.to === '/') {
+        return location.pathname === '/'
+      }
+      return location.pathname.startsWith(item.to)
+    })
+    if (currentIndex >= 0) {
+      setFocusedIndex(currentIndex)
+    }
+  }, [location.pathname])
+
+  const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    if (direction === 'up') {
+      setFocusedIndex(prev => Math.max(0, prev - 1))
+    } else if (direction === 'down') {
+      setFocusedIndex(prev => Math.min(NAV_ITEMS.length - 1, prev + 1))
+    }
+  }, [])
+
+  const handleConfirm = useCallback(() => {
+    const item = NAV_ITEMS[focusedIndex]
+    if (item) {
+      navigate(item.to)
+    }
+  }, [focusedIndex, navigate])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: true,
+    onNavigate: handleNavigate,
+    onConfirm: handleConfirm
+  })
+
   return (
     <aside className="w-56 bg-surface-950 border-r border-surface-800 flex flex-col">
       {/* Logo */}
@@ -47,8 +96,17 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 space-y-1">
-        <NavItem to="/" icon={<Library size={20} />} label="Library" />
-        <NavItem to="/systems" icon={<FolderOpen size={20} />} label="Systems" />
+        {NAV_ITEMS.slice(0, 2).map((item, index) => {
+          const isActive = location.pathname === item.to || (item.to === '/' && location.pathname === '/')
+          return (
+            <NavItemComponent
+              key={item.to}
+              item={item}
+              isActive={isActive}
+              isFocused={focusedIndex === index}
+            />
+          )
+        })}
 
         <div className="pt-4 pb-2">
           <span className="px-4 text-xs font-semibold text-surface-500 uppercase tracking-wider">
@@ -56,13 +114,34 @@ export default function Sidebar() {
           </span>
         </div>
 
-        <NavItem to="/?filter=recent" icon={<Clock size={20} />} label="Recently Played" />
-        <NavItem to="/?filter=favorites" icon={<Star size={20} />} label="Favorites" />
+        {NAV_ITEMS.slice(2, 4).map((item, index) => {
+          const actualIndex = index + 2
+          const isActive = location.pathname.startsWith(item.to) || location.search.includes(item.to.split('?')[1]?.split('=')[0] || '')
+          return (
+            <NavItemComponent
+              key={item.to}
+              item={item}
+              isActive={isActive}
+              isFocused={focusedIndex === actualIndex}
+            />
+          )
+        })}
       </nav>
 
       {/* Settings at bottom */}
       <div className="p-3 border-t border-surface-800">
-        <NavItem to="/settings" icon={<Settings size={20} />} label="Settings" />
+        {NAV_ITEMS.slice(4).map((item, index) => {
+          const actualIndex = index + 4
+          const isActive = location.pathname.startsWith(item.to)
+          return (
+            <NavItemComponent
+              key={item.to}
+              item={item}
+              isActive={isActive}
+              isFocused={focusedIndex === actualIndex}
+            />
+          )
+        })}
       </div>
     </aside>
   )
