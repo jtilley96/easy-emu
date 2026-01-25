@@ -84,28 +84,3 @@ export async function getCurrentRoute(window: Page): Promise<string> {
 export async function waitForToast(window: Page, text: string, timeout = 5000) {
   await window.waitForSelector(`text=${text}`, { timeout })
 }
-
-/**
- * Helper to check if in Big Picture mode
- */
-export async function isInBigPictureMode(window: Page): Promise<boolean> {
-  const hash = await getCurrentRoute(window)
-  return hash.includes('/bigpicture')
-}
-
-/**
- * Helper to enter Big Picture mode
- */
-export async function enterBigPictureMode(window: Page) {
-  await navigateTo(window, '#/bigpicture')
-  await window.waitForSelector('[data-testid="bp-layout"]', { timeout: 5000 }).catch(() => {
-    // Fallback: just check the route
-  })
-}
-
-/**
- * Helper to exit Big Picture mode
- */
-export async function exitBigPictureMode(window: Page) {
-  await navigateTo(window, '#/')
-}

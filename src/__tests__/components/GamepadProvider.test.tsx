@@ -6,11 +6,8 @@ import {
   createMockGamepad,
   setGamepad,
   clearGamepads,
-  pressButton,
-  releaseButton,
   fireGamepadConnected,
-  fireGamepadDisconnected,
-  BUTTON_INDICES
+  fireGamepadDisconnected
 } from '../mocks/gamepadAPI'
 import { flushAnimationFrames } from '../../../vitest.setup'
 
@@ -25,7 +22,6 @@ describe('GamepadProvider', () => {
     useInputStore.setState({
       gamepads: [],
       activeGamepadIndex: null,
-      isBigPictureMode: false,
       analogDeadzone: 0.15
     })
 
@@ -195,36 +191,6 @@ describe('GamepadProvider', () => {
       })
     })
 
-    it('toast includes hint about Big Picture mode', async () => {
-      const addToast = vi.fn()
-      useUIStore.setState({ addToast })
-
-      render(
-        <GamepadProvider>
-          <div>Child</div>
-        </GamepadProvider>
-      )
-
-      await act(async () => {
-        flushAnimationFrames(2)
-      })
-
-      const gamepad = createMockGamepad({ index: 0 })
-      setGamepad(0, gamepad)
-      fireGamepadConnected(gamepad)
-
-      await act(async () => {
-        flushAnimationFrames(2)
-      })
-
-      await waitFor(() => {
-        expect(addToast).toHaveBeenCalledWith(
-          'success',
-          expect.stringContaining('Big Picture')
-        )
-      })
-    })
-
     it('shows toast when controller disconnects', async () => {
       const addToast = vi.fn()
       useUIStore.setState({ addToast })
@@ -257,152 +223,6 @@ describe('GamepadProvider', () => {
           'info',
           expect.stringContaining('disconnected')
         )
-      })
-    })
-  })
-
-  describe('Start button shortcut', () => {
-    it('Start button toggles Big Picture mode', async () => {
-      const gamepad = createMockGamepad({ index: 0 })
-      setGamepad(0, gamepad)
-      fireGamepadConnected(gamepad)
-
-      render(
-        <GamepadProvider>
-          <div>Child</div>
-        </GamepadProvider>
-      )
-
-      await act(async () => {
-        flushAnimationFrames(3)
-      })
-
-      // Press Start
-      pressButton(0, BUTTON_INDICES.START)
-
-      await act(async () => {
-        flushAnimationFrames(5)
-      })
-
-      await waitFor(() => {
-        expect(window.location.hash).toBe('#/bigpicture')
-      })
-    })
-
-    it('toggles on single press (not double)', async () => {
-      const gamepad = createMockGamepad({ index: 0 })
-      setGamepad(0, gamepad)
-      fireGamepadConnected(gamepad)
-
-      render(
-        <GamepadProvider>
-          <div>Child</div>
-        </GamepadProvider>
-      )
-
-      await act(async () => {
-        flushAnimationFrames(3)
-      })
-
-      // Single press
-      pressButton(0, BUTTON_INDICES.START)
-
-      await act(async () => {
-        flushAnimationFrames(3)
-      })
-
-      await waitFor(() => {
-        expect(window.location.hash).toBe('#/bigpicture')
-      })
-    })
-
-    it('does not respond to Start during emulation', async () => {
-      // Set hash to emulation route
-      Object.defineProperty(window, 'location', {
-        value: { hash: '#/play/game-123' },
-        writable: true
-      })
-
-      const gamepad = createMockGamepad({ index: 0 })
-      setGamepad(0, gamepad)
-      fireGamepadConnected(gamepad)
-
-      render(
-        <GamepadProvider>
-          <div>Child</div>
-        </GamepadProvider>
-      )
-
-      await act(async () => {
-        flushAnimationFrames(3)
-      })
-
-      pressButton(0, BUTTON_INDICES.START)
-
-      await act(async () => {
-        flushAnimationFrames(5)
-      })
-
-      // Should not change
-      expect(window.location.hash).toBe('#/play/game-123')
-    })
-
-    it('navigates to #/bigpicture when enabling', async () => {
-      const gamepad = createMockGamepad({ index: 0 })
-      setGamepad(0, gamepad)
-      fireGamepadConnected(gamepad)
-
-      render(
-        <GamepadProvider>
-          <div>Child</div>
-        </GamepadProvider>
-      )
-
-      await act(async () => {
-        flushAnimationFrames(3)
-      })
-
-      pressButton(0, BUTTON_INDICES.START)
-
-      await act(async () => {
-        flushAnimationFrames(5)
-      })
-
-      await waitFor(() => {
-        expect(window.location.hash).toBe('#/bigpicture')
-      })
-    })
-
-    it('navigates to #/ when disabling', async () => {
-      // Start in Big Picture mode
-      Object.defineProperty(window, 'location', {
-        value: { hash: '#/bigpicture' },
-        writable: true
-      })
-      useInputStore.setState({ isBigPictureMode: true })
-
-      const gamepad = createMockGamepad({ index: 0 })
-      setGamepad(0, gamepad)
-      fireGamepadConnected(gamepad)
-
-      render(
-        <GamepadProvider>
-          <div>Child</div>
-        </GamepadProvider>
-      )
-
-      await act(async () => {
-        flushAnimationFrames(3)
-      })
-
-      pressButton(0, BUTTON_INDICES.START)
-
-      await act(async () => {
-        flushAnimationFrames(5)
-      })
-
-      await waitFor(() => {
-        expect(window.location.hash).toBe('#/')
       })
     })
   })

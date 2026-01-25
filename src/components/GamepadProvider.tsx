@@ -38,7 +38,7 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
     // Listen for connection events
     const unsubscribeConnection = service.onConnection((gamepad, connected) => {
       if (connected) {
-        addToast('success', `Controller connected: ${gamepad.name}. Press Start for Big Picture mode`)
+        addToast('success', `Controller connected: ${gamepad.name}`)
         // Auto-select new controller if none is active
         const store = useInputStore.getState()
         if (store.activeGamepadIndex === null) {
@@ -68,90 +68,6 @@ export default function GamepadProvider({ children }: { children: React.ReactNod
     const service = getGamepadService()
     service.setDeadzone(analogDeadzone)
   }, [analogDeadzone])
-
-  // Global gamepad shortcuts (work everywhere except during emulation)
-  useEffect(() => {
-    const service = getGamepadService()
-    let animationFrameId: number
-    let previousStartPressed = false
-    let isProcessingStart = false  // Prevent multiple rapid presses
-
-    const poll = () => {
-      // Skip global shortcuts during emulation - let the emulator handle inputs
-      const isInEmulator = window.location.hash.includes('/play/')
-      if (isInEmulator) {
-        previousStartPressed = false  // Reset state when entering emulator
-        isProcessingStart = false
-        animationFrameId = requestAnimationFrame(poll)
-        return
-      }
-
-      // Get gamepads directly from service (more reliable than store which may lag)
-      const gamepads = service.getGamepads()
-      if (gamepads.length === 0) {
-        previousStartPressed = false
-        isProcessingStart = false
-        animationFrameId = requestAnimationFrame(poll)
-        return
-      }
-
-      // Use first available gamepad
-      const gamepad = gamepads[0]
-      const store = useInputStore.getState()
-      const { setBigPictureMode, setActiveGamepad, activeGamepadIndex } = store
-
-      // Ensure activeGamepadIndex is set
-      if (activeGamepadIndex === null) {
-        setActiveGamepad(gamepad.index)
-      }
-
-      // Check for Start button to toggle Big Picture - use local just-pressed tracking
-      const startPressed = service.isActionPressed(gamepad.index, 'start')
-
-      // Only trigger on button down (not held) and if not already processing
-      if (startPressed && !previousStartPressed && !isProcessingStart) {
-        // Determine current mode from route, not store (store may be stale)
-        const currentHash = window.location.hash
-        const isCurrentlyInBigPicture = currentHash.includes('/bigpicture')
-        const newMode = !isCurrentlyInBigPicture
-        
-        isProcessingStart = true
-        
-        // Update state and navigate immediately using the computed newMode
-        setBigPictureMode(newMode)
-        
-        // Navigate immediately based on computed newMode
-        if (newMode) {
-          window.location.hash = '#/bigpicture'
-        } else {
-          window.location.hash = '#/'
-        }
-        
-        // Reset previousStartPressed immediately to prevent double-trigger
-        previousStartPressed = true
-        
-        // Reset processing flag after a short delay to allow navigation to complete
-        setTimeout(() => {
-          isProcessingStart = false
-        }, 200)
-      } else if (!startPressed) {
-        // Button released - reset tracking
-        previousStartPressed = false
-        isProcessingStart = false
-      } else {
-        // Button still held - keep previousStartPressed true
-        previousStartPressed = startPressed
-      }
-      
-      animationFrameId = requestAnimationFrame(poll)
-    }
-
-    animationFrameId = requestAnimationFrame(poll)
-
-    return () => {
-      cancelAnimationFrame(animationFrameId)
-    }
-  }, [])
 
   return <>{children}</>
 }

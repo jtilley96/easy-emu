@@ -7,7 +7,7 @@ import { formatShortcut, useKeyCapture } from '../../../hooks/useKeyboardShortcu
 const SHORTCUT_GROUPS = [
   {
     title: 'Application',
-    shortcuts: ['toggleFullscreen', 'focusSearch', 'openSettings', 'toggleBigPicture', 'back']
+    shortcuts: ['toggleFullscreen', 'focusSearch', 'openSettings', 'back']
   },
   {
     title: 'Emulation',

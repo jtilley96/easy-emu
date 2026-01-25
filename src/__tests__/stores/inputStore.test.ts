@@ -28,19 +28,15 @@ describe('inputStore', () => {
         toggleFullscreen: 'F11',
         focusSearch: 'ctrl+f',
         openSettings: 'ctrl+,',
-        toggleBigPicture: 'Tab',
         back: 'Escape',
         pauseGame: 'p',
         saveState: 'F5',
         loadState: 'F8',
         screenshot: 'F12'
       },
-      isBigPictureMode: false,
       analogDeadzone: 0.15,
       dpadRepeatDelay: 400,
-      dpadRepeatRate: 100,
-      bigPictureOnStartup: false,
-      bigPictureCardSize: 'medium'
+      dpadRepeatRate: 100
     })
   })
 
@@ -117,50 +113,6 @@ describe('inputStore', () => {
     })
   })
 
-  describe('setBigPictureMode', () => {
-    it('sets big picture mode to true', () => {
-      useInputStore.getState().setBigPictureMode(true)
-
-      const state = useInputStore.getState()
-      expect(state.isBigPictureMode).toBe(true)
-    })
-
-    it('sets big picture mode to false', () => {
-      useInputStore.setState({ isBigPictureMode: true })
-
-      useInputStore.getState().setBigPictureMode(false)
-
-      const state = useInputStore.getState()
-      expect(state.isBigPictureMode).toBe(false)
-    })
-
-    it('persists to config', () => {
-      const api = getMockElectronAPI()
-
-      useInputStore.getState().setBigPictureMode(true)
-
-      expect(api.config.set).toHaveBeenCalledWith('bigPictureModeEnabled', true)
-    })
-  })
-
-  describe('toggleBigPictureMode', () => {
-    it('toggles from false to true', () => {
-      useInputStore.setState({ isBigPictureMode: false })
-
-      useInputStore.getState().toggleBigPictureMode()
-
-      expect(useInputStore.getState().isBigPictureMode).toBe(true)
-    })
-
-    it('toggles from true to false', () => {
-      useInputStore.setState({ isBigPictureMode: true })
-
-      useInputStore.getState().toggleBigPictureMode()
-
-      expect(useInputStore.getState().isBigPictureMode).toBe(false)
-    })
-  })
-
   describe('setAnalogDeadzone', () => {
     it('sets analog deadzone value', () => {
       useInputStore.getState().setAnalogDeadzone(0.25)
@@ -209,45 +161,6 @@ describe('inputStore', () => {
       useInputStore.getState().setDpadRepeatRate(150)
 
       expect(api.config.set).toHaveBeenCalledWith('dpadRepeatRate', 150)
-    })
-  })
-
-  describe('setBigPictureOnStartup', () => {
-    it('sets big picture on startup preference', () => {
-      useInputStore.getState().setBigPictureOnStartup(true)
-
-      const state = useInputStore.getState()
-      expect(state.bigPictureOnStartup).toBe(true)
-    })
-
-    it('persists to config', () => {
-      const api = getMockElectronAPI()
-
-      useInputStore.getState().setBigPictureOnStartup(true)
-
-      expect(api.config.set).toHaveBeenCalledWith('bigPictureOnStartup', true)
-    })
-  })
-
-  describe('setBigPictureCardSize', () => {
-    it('sets card size to small', () => {
-      useInputStore.getState().setBigPictureCardSize('small')
-
-      expect(useInputStore.getState().bigPictureCardSize).toBe('small')
-    })
-
-    it('sets card size to large', () => {
-      useInputStore.getState().setBigPictureCardSize('large')
-
-      expect(useInputStore.getState().bigPictureCardSize).toBe('large')
-    })
-
-    it('persists to config', () => {
-      const api = getMockElectronAPI()
-
-      useInputStore.getState().setBigPictureCardSize('small')
-
-      expect(api.config.set).toHaveBeenCalledWith('bigPictureCardSize', 'small')
     })
   })
 
@@ -369,10 +282,7 @@ describe('inputStore', () => {
       api.config.getAll.mockResolvedValue({
         analogDeadzone: 0.3,
         dpadRepeatDelay: 500,
-        dpadRepeatRate: 150,
-        bigPictureOnStartup: true,
-        bigPictureCardSize: 'large',
-        bigPictureModeEnabled: true
+        dpadRepeatRate: 150
       })
 
       await useInputStore.getState().loadSettings()
@@ -381,9 +291,6 @@ describe('inputStore', () => {
       expect(state.analogDeadzone).toBe(0.3)
       expect(state.dpadRepeatDelay).toBe(500)
       expect(state.dpadRepeatRate).toBe(150)
-      expect(state.bigPictureOnStartup).toBe(true)
-      expect(state.bigPictureCardSize).toBe('large')
-      expect(state.isBigPictureMode).toBe(true)
     })
 
     it('uses defaults for missing values', async () => {

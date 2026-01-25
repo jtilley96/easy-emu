@@ -13,11 +13,6 @@ import SetupWizard from './pages/SetupWizard'
 import EmulatorView from './pages/EmulatorView'
 import ToastContainer from './components/Toast'
 import GamepadProvider from './components/GamepadProvider'
-import BPLayout from './components/bigpicture/BPLayout'
-import BPLibrary from './pages/bigpicture/BPLibrary'
-import BPGameDetails from './pages/bigpicture/BPGameDetails'
-import BPSettings from './pages/bigpicture/BPSettings'
-import BPSystems from './pages/bigpicture/BPSystems'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 function App() {
@@ -26,11 +21,8 @@ function App() {
   const setScrapeProgress = useLibraryStore(s => s.setScrapeProgress)
   const setDownloadProgress = useEmulatorStore(s => s.setDownloadProgress)
   const {
-    isBigPictureMode,
-    setBigPictureMode,
     keyboardShortcuts,
-    loadSettings: loadInputSettings,
-    bigPictureOnStartup
+    loadSettings: loadInputSettings
   } = useInputStore()
 
   useEffect(() => {
@@ -80,24 +72,12 @@ function App() {
       }
     },
     openSettings: () => {
-      if (isBigPictureMode) {
-        window.location.hash = '#/bigpicture/settings'
-      } else {
-        window.location.hash = '#/settings'
-      }
-    },
-    toggleBigPicture: () => {
-      setBigPictureMode(!isBigPictureMode)
-      if (!isBigPictureMode) {
-        window.location.hash = '#/bigpicture'
-      } else {
-        window.location.hash = '#/'
-      }
+      window.location.hash = '#/settings'
     },
     back: () => {
       window.history.back()
     }
-  }), [isBigPictureMode, setBigPictureMode])
+  }), [])
 
   // Reverse mapping: action -> shortcut
   const shortcutsMap = useMemo(() => {
@@ -112,14 +92,6 @@ function App() {
   const location = typeof window !== 'undefined' ? window.location.hash : ''
   const isInEmulator = location.includes('/play/')
   useKeyboardShortcuts(shortcutsMap, shortcutHandlers, !isFirstRun && !isLoading && !isInEmulator)
-
-  // Handle Big Picture mode on startup
-  useEffect(() => {
-    if (!isFirstRun && !isLoading && bigPictureOnStartup && !window.location.hash.includes('/bigpicture')) {
-      setBigPictureMode(true)
-      window.location.hash = '#/bigpicture'
-    }
-  }, [isFirstRun, isLoading, bigPictureOnStartup, setBigPictureMode])
 
   if (isLoading) {
     return (
@@ -146,14 +118,6 @@ function App() {
       <Routes>
         {/* Full-screen emulator view (no layout) */}
         <Route path="/play/:gameId" element={<EmulatorView />} />
-
-        {/* Big Picture mode routes */}
-        <Route path="/bigpicture" element={<BPLayout />}>
-          <Route index element={<BPLibrary />} />
-          <Route path="game/:gameId" element={<BPGameDetails />} />
-          <Route path="systems" element={<BPSystems />} />
-          <Route path="settings" element={<BPSettings />} />
-        </Route>
 
         {/* Standard layout routes */}
         <Route path="/*" element={

@@ -1,4 +1,4 @@
-import { ReactNode, createContext, useContext, useState, useCallback } from 'react'
+import { ReactNode, createContext, useContext, useState } from 'react'
 import TitleBar from './TitleBar'
 import Sidebar from './Sidebar'
 

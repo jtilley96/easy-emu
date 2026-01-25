@@ -464,12 +464,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         window.EJS_color = '#6366f1'
 
         // Enable gamepad support in toolbar
-        // Note: EJS_defaultControls is not set here as it can cause crashes in EmulatorJS.
-        // Controller configuration is done via the in-game settings menu (gamepad button).
-        // The user's physical controller (Xbox/PlayStation/Nintendo) will be auto-selected,
-        // and EmulatorJS will handle button mapping internally. The controller layout shown
-        // in EmulatorJS settings may reflect the emulated platform, but the actual button
-        // mapping uses the physical controller's button indices.
         window.EJS_Buttons = {
           playPause: true,
           restart: true,

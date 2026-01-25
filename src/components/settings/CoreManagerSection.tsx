@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Download, Trash2, Check, AlertCircle, Loader2, HardDrive } from 'lucide-react'
 import { useEmulatorStore } from '../../store/emulatorStore'
 import { useUIStore } from '../../store/uiStore'
-import { AvailableCore, CoreDownloadProgress } from '../../types'
+import { AvailableCore, CoreDownloadProgress, SettingsSectionProps } from '../../types'
+import { useGamepadNavigation } from '../../hooks/useGamepadNavigation'
 
-export default function CoreManagerSection() {
+export default function CoreManagerSection({ isFocused, focusedRow, focusedCol: _focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const {
     availableCores,
     downloadingCores,
@@ -19,6 +20,31 @@ export default function CoreManagerSection() {
 
   const [loading, setLoading] = useState(true)
   const [deletingCore, setDeletingCore] = useState<string | null>(null)
+
+  // Simple linear navigation: preferEmbedded toggle, then each core
+  const notInstalledCount = availableCores.filter(c => !c.installed).length
+  const hasInstallAll = notInstalledCount > 0
+  const itemCount = 1 + (hasInstallAll ? 1 : 0) + availableCores.length
+  
+  useEffect(() => {
+    onGridChange({ rows: itemCount, cols: Array(itemCount).fill(1) })
+  }, [itemCount, onGridChange])
+
+  // Helper to check if row is focused
+  const isRowFocused = (row: number) => {
+    return isFocused && focusedRow === row
+  }
+  
+  // Map row index to item
+  const getRowItem = (row: number): 'preferEmbedded' | 'installAll' | { type: 'core', index: number } | null => {
+    if (row === 0) return 'preferEmbedded'
+    if (hasInstallAll && row === 1) return 'installAll'
+    const coreIndex = row - (hasInstallAll ? 2 : 1)
+    if (coreIndex >= 0 && coreIndex < availableCores.length) {
+      return { type: 'core', index: coreIndex }
+    }
+    return null
+  }
 
   // Load cores on mount
   useEffect(() => {
@@ -78,6 +104,53 @@ export default function CoreManagerSection() {
   const installedCount = availableCores.filter(c => c.installed).length
   const totalCount = availableCores.length
 
+  // Handle gamepad confirmation
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    const item = getRowItem(focusedRow)
+    if (!item) return
+
+    if (item === 'preferEmbedded') {
+      setPreferEmbedded(!preferEmbedded)
+    } else if (item === 'installAll') {
+      handleInstallAll()
+    } else if (typeof item === 'object' && item.type === 'core') {
+      const core = availableCores[item.index]
+      if (core) {
+        if (core.installed) {
+          handleDelete(core.id)
+        } else {
+          handleDownload(core.id)
+        }
+      }
+    }
+  }, [focusedRow, preferEmbedded, availableCores, hasInstallAll, justActivatedRef])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isFocused,
+    onNavigate: (direction) => {
+      if (direction === 'up') {
+        if (focusedRow === 0) {
+          onBack()
+        } else {
+          onFocusChange(focusedRow - 1, 0)
+        }
+      } else if (direction === 'down') {
+        if (focusedRow < itemCount - 1) {
+          onFocusChange(focusedRow + 1, 0)
+        }
+      } else if (direction === 'left') {
+        onBack()
+      }
+    },
+    onConfirm: handleConfirm,
+    onBack,
+    scrollRef
+  })
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -89,7 +162,12 @@ export default function CoreManagerSection() {
       </div>
 
       {/* Settings toggle */}
-      <div className="p-4 bg-surface-800 rounded-lg">
+      <div 
+        data-focus-row={0}
+        data-focus-col={0}
+        className={`p-4 bg-surface-800 rounded-lg transition-all ${
+          isRowFocused(0) ? 'ring-2 ring-accent' : ''
+        }`}>
         <label className="flex items-center justify-between cursor-pointer">
           <div>
             <div className="font-medium">Prefer Embedded Emulation</div>
@@ -123,8 +201,14 @@ export default function CoreManagerSection() {
 
         {installedCount < totalCount && (
           <button
+            data-focus-row={1}
+            data-focus-col={0}
             onClick={handleInstallAll}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg font-medium"
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              isRowFocused(1)
+                ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                : 'bg-accent hover:bg-accent-hover'
+            }`}
           >
             Install All
           </button>
@@ -138,16 +222,21 @@ export default function CoreManagerSection() {
         </div>
       ) : (
         <div className="space-y-3">
-          {availableCores.map((core) => (
-            <CoreCard
-              key={core.id}
-              core={core}
-              downloadProgress={downloadingCores[core.id]}
-              isDeleting={deletingCore === core.id}
-              onDownload={() => handleDownload(core.id)}
-              onDelete={() => handleDelete(core.id)}
-            />
-          ))}
+          {availableCores.map((core, index) => {
+            const rowIndex = (hasInstallAll ? 2 : 1) + index
+            return (
+              <CoreCard
+                key={core.id}
+                core={core}
+                downloadProgress={downloadingCores[core.id]}
+                isDeleting={deletingCore === core.id}
+                isFocused={isRowFocused(rowIndex)}
+                rowIndex={rowIndex}
+                onDownload={() => handleDownload(core.id)}
+                onDelete={() => handleDelete(core.id)}
+              />
+            )
+          })}
         </div>
       )}
 
@@ -175,11 +264,13 @@ interface CoreCardProps {
   core: AvailableCore
   downloadProgress?: CoreDownloadProgress
   isDeleting: boolean
+  isFocused: boolean
+  rowIndex: number
   onDownload: () => void
   onDelete: () => void
 }
 
-function CoreCard({ core, downloadProgress, isDeleting, onDownload, onDelete }: CoreCardProps) {
+function CoreCard({ core, downloadProgress, isDeleting, isFocused, rowIndex, onDownload, onDelete }: CoreCardProps) {
   const isDownloading = downloadProgress && downloadProgress.status === 'downloading'
   const isVerifying = downloadProgress?.status === 'verifying'
   const hasError = downloadProgress?.status === 'error'
@@ -190,7 +281,12 @@ function CoreCard({ core, downloadProgress, isDeleting, onDownload, onDelete }: 
   }
 
   return (
-    <div className="p-4 bg-surface-800 rounded-lg">
+    <div 
+      data-focus-row={rowIndex}
+      data-focus-col={0}
+      className={`p-4 bg-surface-800 rounded-lg transition-all ${
+        isFocused ? 'ring-2 ring-accent' : ''
+      }`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           {/* Status icon */}
@@ -221,7 +317,11 @@ function CoreCard({ core, downloadProgress, isDeleting, onDownload, onDelete }: 
             <button
               onClick={onDelete}
               disabled={isDeleting}
-              className="p-2 rounded-lg hover:bg-red-500/20 hover:text-red-400 transition-colors disabled:opacity-50"
+              className={`p-2 rounded-lg transition-colors disabled:opacity-50 ${
+                isFocused
+                  ? 'bg-red-500/30 text-red-400'
+                  : 'hover:bg-red-500/20 hover:text-red-400'
+              }`}
               title="Remove core"
             >
               {isDeleting ? (
@@ -234,7 +334,11 @@ function CoreCard({ core, downloadProgress, isDeleting, onDownload, onDelete }: 
             <button
               onClick={onDownload}
               disabled={isDownloading || isVerifying}
-              className="px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg font-medium disabled:opacity-50"
+              className={`px-4 py-2 rounded-lg font-medium disabled:opacity-50 transition-all ${
+                isFocused
+                  ? 'bg-accent text-white scale-105'
+                  : 'bg-accent hover:bg-accent-hover'
+              }`}
             >
               {isDownloading ? 'Downloading...' : isVerifying ? 'Verifying...' : 'Install'}
             </button>

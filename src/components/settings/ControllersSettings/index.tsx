@@ -1,19 +1,17 @@
-import { useState, useEffect } from 'react'
-import { Gamepad2, Keyboard, Monitor, RefreshCw, Settings2 } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Gamepad2, Keyboard, RefreshCw, Settings2 } from 'lucide-react'
 import { useInputStore } from '../../../store/inputStore'
 import { useUIStore } from '../../../store/uiStore'
 import { useGamepad } from '../../../hooks/useGamepad'
+import { useGamepadNavigation } from '../../../hooks/useGamepadNavigation'
 import DetectedControllers from './DetectedControllers'
 import ControllerProfileEditor from './ControllerProfileEditor'
 import KeyboardShortcutsSection from './KeyboardShortcutsSection'
+import { SettingsSectionProps } from '../../../types'
 
-export default function ControllersSettings() {
+export default function ControllersSettings({ isFocused, focusedRow, focusedCol: _focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const { gamepads } = useGamepad()
   const {
-    bigPictureOnStartup,
-    setBigPictureOnStartup,
-    bigPictureCardSize,
-    setBigPictureCardSize,
     analogDeadzone,
     setAnalogDeadzone,
     dpadRepeatDelay,
@@ -26,6 +24,11 @@ export default function ControllersSettings() {
 
   const [selectedControllerIndex, setSelectedControllerIndex] = useState<number | null>(null)
   const [showProfileEditor, setShowProfileEditor] = useState(false)
+
+  // 5 rows: refresh, configure mapping, deadzone, repeat delay, repeat rate
+  useEffect(() => {
+    onGridChange({ rows: 5, cols: [1, 1, 1, 1, 1] })
+  }, [onGridChange])
 
   useEffect(() => {
     loadSettings()
@@ -57,6 +60,66 @@ export default function ControllersSettings() {
     setShowProfileEditor(false)
   }
 
+  // Helper to check if row is focused
+  const isRowFocused = (row: number) => {
+    return isFocused && focusedRow === row
+  }
+
+  // Handle gamepad confirmation
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    if (focusedRow === 0) {
+      navigator.getGamepads()
+      addToast('info', 'Controllers refreshed')
+    } else if (focusedRow === 1) {
+      handleEditProfile()
+    }
+    // Sliders don't need confirm - they're adjusted via left/right
+  }, [focusedRow, addToast, justActivatedRef])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isFocused && !showProfileEditor,
+    onNavigate: (direction) => {
+      if (direction === 'up') {
+        if (focusedRow === 0) {
+          onBack()
+        } else {
+          onFocusChange(focusedRow - 1, 0)
+        }
+      } else if (direction === 'down') {
+        if (focusedRow < 4) {
+          onFocusChange(focusedRow + 1, 0)
+        }
+      } else if (direction === 'left') {
+        // Handle slider adjustments
+        if (focusedRow === 2) {
+          setAnalogDeadzone(Math.max(0, analogDeadzone - 0.05))
+        } else if (focusedRow === 3) {
+          setDpadRepeatDelay(Math.max(200, dpadRepeatDelay - 50))
+        } else if (focusedRow === 4) {
+          setDpadRepeatRate(Math.max(50, dpadRepeatRate - 10))
+        } else {
+          onBack()
+        }
+      } else if (direction === 'right') {
+        // Handle slider adjustments
+        if (focusedRow === 2) {
+          setAnalogDeadzone(Math.min(0.5, analogDeadzone + 0.05))
+        } else if (focusedRow === 3) {
+          setDpadRepeatDelay(Math.min(1000, dpadRepeatDelay + 50))
+        } else if (focusedRow === 4) {
+          setDpadRepeatRate(Math.min(300, dpadRepeatRate + 10))
+        }
+      }
+    },
+    onConfirm: handleConfirm,
+    onBack,
+    scrollRef
+  })
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">Controller Settings</h2>
@@ -69,12 +132,18 @@ export default function ControllersSettings() {
             Detected Controllers
           </h3>
           <button
+            data-focus-row={0}
+            data-focus-col={0}
             onClick={() => {
               // Force a re-poll of gamepads
               navigator.getGamepads()
               addToast('info', 'Controllers refreshed')
             }}
-            className="flex items-center gap-1 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+            className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-all ${
+              isRowFocused(0)
+                ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                : 'bg-surface-700 hover:bg-surface-600'
+            }`}
           >
             <RefreshCw size={14} />
             Refresh
@@ -90,8 +159,14 @@ export default function ControllersSettings() {
         {selectedController && (
           <div className="mt-4">
             <button
+              data-focus-row={1}
+              data-focus-col={0}
               onClick={handleEditProfile}
-              className="flex items-center gap-2 px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                isRowFocused(1)
+                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 hover:bg-surface-600'
+              }`}
             >
               <Settings2 size={16} />
               Configure Controller Mapping
@@ -105,9 +180,16 @@ export default function ControllersSettings() {
         <h3 className="text-lg font-semibold mb-4">Gamepad Settings</h3>
 
         <div className="space-y-4">
-          <div className="bg-surface-800 rounded-lg p-4">
+          <div 
+            data-focus-row={2}
+            data-focus-col={0}
+            className={`bg-surface-800 rounded-lg p-4 transition-all ${
+              isRowFocused(2) ? 'ring-2 ring-accent' : ''
+            }`}
+          >
             <label className="block text-sm font-medium mb-2">
               Analog Stick Deadzone: {(analogDeadzone * 100).toFixed(0)}%
+              {isRowFocused(2) && <span className="text-accent ml-2">← → to adjust</span>}
             </label>
             <input
               type="range"
@@ -122,9 +204,16 @@ export default function ControllersSettings() {
             </p>
           </div>
 
-          <div className="bg-surface-800 rounded-lg p-4">
+          <div 
+            data-focus-row={3}
+            data-focus-col={0}
+            className={`bg-surface-800 rounded-lg p-4 transition-all ${
+              isRowFocused(3) ? 'ring-2 ring-accent' : ''
+            }`}
+          >
             <label className="block text-sm font-medium mb-2">
               D-Pad Repeat Delay: {dpadRepeatDelay}ms
+              {isRowFocused(3) && <span className="text-accent ml-2">← → to adjust</span>}
             </label>
             <input
               type="range"
@@ -140,9 +229,16 @@ export default function ControllersSettings() {
             </p>
           </div>
 
-          <div className="bg-surface-800 rounded-lg p-4">
+          <div 
+            data-focus-row={4}
+            data-focus-col={0}
+            className={`bg-surface-800 rounded-lg p-4 transition-all ${
+              isRowFocused(4) ? 'ring-2 ring-accent' : ''
+            }`}
+          >
             <label className="block text-sm font-medium mb-2">
               D-Pad Repeat Rate: {dpadRepeatRate}ms
+              {isRowFocused(4) && <span className="text-accent ml-2">← → to adjust</span>}
             </label>
             <input
               type="range"
@@ -167,44 +263,6 @@ export default function ControllersSettings() {
           Keyboard Shortcuts
         </h3>
         <KeyboardShortcutsSection />
-      </section>
-
-      {/* Big Picture Settings */}
-      <section className="mb-8">
-        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Monitor size={20} />
-          Big Picture Mode
-        </h3>
-
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={bigPictureOnStartup}
-              onChange={(e) => setBigPictureOnStartup(e.target.checked)}
-              className="w-4 h-4 accent-accent"
-            />
-            <div>
-              <span className="font-medium">Start in Big Picture Mode</span>
-              <p className="text-surface-400 text-sm">
-                Launch EasyEmu directly into Big Picture mode
-              </p>
-            </div>
-          </label>
-
-          <div className="bg-surface-800 rounded-lg p-4">
-            <label className="block text-sm font-medium mb-2">Card Size</label>
-            <select
-              value={bigPictureCardSize}
-              onChange={(e) => setBigPictureCardSize(e.target.value as 'small' | 'medium' | 'large')}
-              className="w-full bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm"
-            >
-              <option value="small">Small</option>
-              <option value="medium">Medium</option>
-              <option value="large">Large</option>
-            </select>
-          </div>
-        </div>
       </section>
 
       {/* Controller Profile Editor Modal */}

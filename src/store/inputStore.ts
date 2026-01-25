@@ -12,31 +12,20 @@ interface InputState {
   // Keyboard shortcuts (action -> key combo string like "ctrl+f")
   keyboardShortcuts: Record<string, string>
 
-  // Big Picture mode
-  isBigPictureMode: boolean
-
   // Gamepad settings
   analogDeadzone: number
   dpadRepeatDelay: number
   dpadRepeatRate: number
 
-  // Big Picture settings
-  bigPictureOnStartup: boolean
-  bigPictureCardSize: 'small' | 'medium' | 'large'
-
   // Actions
   setGamepads: (gamepads: GamepadState[]) => void
   setActiveGamepad: (index: number | null) => void
-  setBigPictureMode: (enabled: boolean) => void
-  toggleBigPictureMode: () => void
   updateMapping: (controllerId: string, mapping: ControllerMapping) => void
   deleteMapping: (controllerId: string) => void
   updateKeyboardShortcut: (action: string, shortcut: string) => void
   setAnalogDeadzone: (value: number) => void
   setDpadRepeatDelay: (value: number) => void
   setDpadRepeatRate: (value: number) => void
-  setBigPictureOnStartup: (value: boolean) => void
-  setBigPictureCardSize: (size: 'small' | 'medium' | 'large') => void
   loadSettings: () => Promise<void>
   saveSettings: () => Promise<void>
 }
@@ -46,7 +35,6 @@ const DEFAULT_KEYBOARD_SHORTCUTS: Record<string, string> = {
   toggleFullscreen: 'F11',
   focusSearch: 'ctrl+f',
   openSettings: 'ctrl+,',
-  toggleBigPicture: 'Tab',
   back: 'Escape',
   pauseGame: 'p',
   saveState: 'F5',
@@ -59,12 +47,9 @@ export const useInputStore = create<InputState>((set, get) => ({
   activeGamepadIndex: null,
   controllerMappings: {},
   keyboardShortcuts: { ...DEFAULT_KEYBOARD_SHORTCUTS },
-  isBigPictureMode: false,
   analogDeadzone: 0.15,
   dpadRepeatDelay: 400,
   dpadRepeatRate: 100,
-  bigPictureOnStartup: false,
-  bigPictureCardSize: 'medium',
 
   setGamepads: (gamepads) => {
     set({ gamepads })
@@ -84,17 +69,6 @@ export const useInputStore = create<InputState>((set, get) => ({
 
   setActiveGamepad: (index) => {
     set({ activeGamepadIndex: index })
-  },
-
-  setBigPictureMode: (enabled) => {
-    set({ isBigPictureMode: enabled })
-    // Persist to config
-    window.electronAPI?.config.set('bigPictureModeEnabled', enabled)
-  },
-
-  toggleBigPictureMode: () => {
-    const { isBigPictureMode } = get()
-    get().setBigPictureMode(!isBigPictureMode)
   },
 
   updateMapping: (controllerId, mapping) => {
@@ -141,16 +115,6 @@ export const useInputStore = create<InputState>((set, get) => ({
     window.electronAPI?.config.set('dpadRepeatRate', value)
   },
 
-  setBigPictureOnStartup: (value) => {
-    set({ bigPictureOnStartup: value })
-    window.electronAPI?.config.set('bigPictureOnStartup', value)
-  },
-
-  setBigPictureCardSize: (size) => {
-    set({ bigPictureCardSize: size })
-    window.electronAPI?.config.set('bigPictureCardSize', size)
-  },
-
   loadSettings: async () => {
     try {
       const config = await window.electronAPI.config.getAll() as Record<string, unknown>
@@ -161,12 +125,9 @@ export const useInputStore = create<InputState>((set, get) => ({
           ...DEFAULT_KEYBOARD_SHORTCUTS,
           ...(config.keyboardShortcuts as Record<string, string>) || {}
         },
-        isBigPictureMode: config.bigPictureModeEnabled === true,
         analogDeadzone: typeof config.analogDeadzone === 'number' ? config.analogDeadzone : 0.15,
         dpadRepeatDelay: typeof config.dpadRepeatDelay === 'number' ? config.dpadRepeatDelay : 400,
-        dpadRepeatRate: typeof config.dpadRepeatRate === 'number' ? config.dpadRepeatRate : 100,
-        bigPictureOnStartup: config.bigPictureOnStartup === true,
-        bigPictureCardSize: (config.bigPictureCardSize as 'small' | 'medium' | 'large') || 'medium'
+        dpadRepeatRate: typeof config.dpadRepeatRate === 'number' ? config.dpadRepeatRate : 100
       })
     } catch (error) {
       console.error('Failed to load input settings:', error)
@@ -189,7 +150,6 @@ export const ACTION_LABELS: Record<string, string> = {
   toggleFullscreen: 'Toggle Fullscreen',
   focusSearch: 'Focus Search',
   openSettings: 'Open Settings',
-  toggleBigPicture: 'Toggle Big Picture Mode',
   back: 'Back / Close',
   pauseGame: 'Pause Game',
   saveState: 'Save State',

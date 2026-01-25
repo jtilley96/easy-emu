@@ -136,3 +136,15 @@ export interface SaveStateInfo {
   screenshotPath?: string
   size?: number
 }
+
+// Settings section props for gamepad navigation (grid-based)
+export interface SettingsSectionProps {
+  isFocused: boolean
+  focusedRow: number
+  focusedCol: number
+  onFocusChange: (row: number, col: number) => void
+  onGridChange: (grid: { rows: number; cols: number[] }) => void
+  onBack: () => void
+  justActivatedRef: React.MutableRefObject<boolean>
+  scrollRef?: React.RefObject<HTMLElement>
+}

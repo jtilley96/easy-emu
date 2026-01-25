@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FolderOpen,
@@ -29,6 +29,7 @@ import ControllersSettings from '../components/settings/ControllersSettings'
 import { EmulatorInfo } from '../types'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 import { useLayoutContext } from '../components/Layout'
+import { SettingsSectionProps } from '../types'
 
 interface BiosStatus {
   id: string
@@ -66,6 +67,45 @@ export default function Settings() {
   const { isSidebarFocused, setIsSidebarFocused } = useLayoutContext()
   const [focusedSectionIndex, setFocusedSectionIndex] = useState(0)
   const [isSectionListFocused, setIsSectionListFocused] = useState(true)
+  
+  // Prevent A button from firing immediately after navigation or focus change
+  const justActivatedRef = useRef(true)
+  const contentJustActivatedRef = useRef(true)
+  
+  // Reset activation guard when sidebar focus changes
+  useEffect(() => {
+    if (isSidebarFocused) {
+      // Page lost focus - set guard for when it regains focus
+      justActivatedRef.current = true
+    } else {
+      // Page gained focus - clear guard after short delay
+      const timeout = setTimeout(() => {
+        justActivatedRef.current = false
+      }, 200)
+      return () => clearTimeout(timeout)
+    }
+  }, [isSidebarFocused])
+  
+  // Reset content activation guard when section list focus changes
+  useEffect(() => {
+    if (isSectionListFocused) {
+      // Content lost focus - set guard for when it regains focus
+      contentJustActivatedRef.current = true
+    } else {
+      // Content gained focus - clear guard after short delay
+      const timeout = setTimeout(() => {
+        contentJustActivatedRef.current = false
+      }, 200)
+      return () => clearTimeout(timeout)
+    }
+  }, [isSectionListFocused])
+  
+  // Content area gamepad state - grid based (row, col)
+  const [focusedRow, setFocusedRow] = useState(0)
+  const [focusedCol, setFocusedCol] = useState(0)
+  // Grid structure: { rows: number, cols: number[] } - cols[row] = number of columns in that row
+  const [_contentGrid, setContentGrid] = useState<{ rows: number; cols: number[] }>({ rows: 0, cols: [] })
+  const contentScrollRef = useRef<HTMLDivElement>(null)
 
   // Update focused section index based on current route
   useEffect(() => {
@@ -75,11 +115,40 @@ export default function Settings() {
     }
   }, [currentSection])
 
+  // Reset content focus when section changes
+  useEffect(() => {
+    setFocusedRow(0)
+    setFocusedCol(0)
+  }, [currentSection])
+
+  // Auto-scroll to focused content item
+  useEffect(() => {
+    if (!isSectionListFocused && contentScrollRef.current) {
+      const focusedElement = contentScrollRef.current.querySelector(`[data-focus-row="${focusedRow}"][data-focus-col="${focusedCol}"]`)
+      if (focusedElement) {
+        const container = contentScrollRef.current
+        const elementRect = focusedElement.getBoundingClientRect()
+        const containerRect = container.getBoundingClientRect()
+        
+        // Calculate desired position (~30% from top for lookahead)
+        const targetTop = containerRect.top + containerRect.height * 0.3
+        const offset = elementRect.top - targetTop
+        
+        if (Math.abs(offset) > 50) {
+          container.scrollTo({
+            top: container.scrollTop + offset,
+            behavior: 'smooth'
+          })
+        }
+      }
+    }
+  }, [focusedRow, focusedCol, isSectionListFocused])
+
   const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
     if (isSidebarFocused) return
 
     if (isSectionListFocused) {
-      // Navigate settings sections
+      // Navigate settings section tabs - only up/down
       if (direction === 'up') {
         if (focusedSectionIndex === 0) {
           // At top - return focus to main sidebar
@@ -89,29 +158,27 @@ export default function Settings() {
         }
       } else if (direction === 'down') {
         setFocusedSectionIndex(prev => Math.min(NAV_ITEMS.length - 1, prev + 1))
-      } else if (direction === 'right') {
-        // Move focus to content area
-        setIsSectionListFocused(false)
       } else if (direction === 'left') {
         // Return focus to main sidebar
         setIsSidebarFocused(true)
       }
-    } else {
-      // In content area - left goes back to section list
-      if (direction === 'left') {
-        setIsSectionListFocused(true)
-      } else if (direction === 'up') {
-        setIsSectionListFocused(true)
-      }
+      // Right does nothing in section list - must press A to enter
     }
+    // Content area navigation is handled by each section
   }, [isSidebarFocused, isSectionListFocused, focusedSectionIndex, setIsSidebarFocused])
 
   const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
     if (isSidebarFocused) return
     if (isSectionListFocused) {
+      // Select section and enter content area
       navigate(`/settings/${NAV_ITEMS[focusedSectionIndex].id}`)
       setIsSectionListFocused(false)
+      setFocusedRow(0)
+      setFocusedCol(0)
     }
+    // Content area confirmation is handled by each section
   }, [isSidebarFocused, isSectionListFocused, focusedSectionIndex, navigate])
 
   const handleBack = useCallback(() => {
@@ -123,13 +190,28 @@ export default function Settings() {
     }
   }, [isSidebarFocused, isSectionListFocused, setIsSidebarFocused])
 
-  // Gamepad navigation (only when page is focused)
+  // Gamepad navigation for section list only
   useGamepadNavigation({
-    enabled: !isSidebarFocused,
+    enabled: !isSidebarFocused && isSectionListFocused,
     onNavigate: handleNavigate,
     onConfirm: handleConfirm,
     onBack: handleBack
   })
+
+  // Section props for content gamepad navigation
+  const sectionProps: SettingsSectionProps = {
+    isFocused: !isSidebarFocused && !isSectionListFocused,
+    focusedRow,
+    focusedCol,
+    onFocusChange: (row: number, col: number) => {
+      setFocusedRow(row)
+      setFocusedCol(col)
+    },
+    onGridChange: setContentGrid,
+    onBack: () => setIsSectionListFocused(true),
+    justActivatedRef: contentJustActivatedRef,
+    scrollRef: contentScrollRef as React.RefObject<HTMLElement>
+  }
 
   return (
     <div className="flex h-full">
@@ -162,24 +244,37 @@ export default function Settings() {
       </nav>
 
       {/* Settings Content */}
-      <div className="flex-1 overflow-auto p-6">
-        {currentSection === 'library' && <LibrarySettings />}
-        {currentSection === 'emulators' && <EmulatorsSettings />}
-        {currentSection === 'cores' && <CoreManagerSection />}
-        {currentSection === 'bios' && <BiosSettings />}
-        {currentSection === 'paths' && <PathsSettings />}
-        {currentSection === 'metadata' && <MetadataSettings />}
-        {currentSection === 'controllers' && <ControllersSettings />}
-        {currentSection === 'general' && <GeneralSettings />}
+      <div ref={contentScrollRef} className="flex-1 overflow-auto p-6">
+        {currentSection === 'library' && <LibrarySettings {...sectionProps} />}
+        {currentSection === 'emulators' && <EmulatorsSettings {...sectionProps} />}
+        {currentSection === 'cores' && <CoreManagerSection {...sectionProps} />}
+        {currentSection === 'bios' && <BiosSettings {...sectionProps} />}
+        {currentSection === 'paths' && <PathsSettings {...sectionProps} />}
+        {currentSection === 'metadata' && <MetadataSettings {...sectionProps} />}
+        {currentSection === 'controllers' && <ControllersSettings {...sectionProps} />}
+        {currentSection === 'general' && <GeneralSettings {...sectionProps} />}
       </div>
     </div>
   )
 }
 
 // Library Settings Section
-function LibrarySettings() {
+function LibrarySettings({ isFocused, focusedRow, focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const { romFolders, addRomFolder, removeRomFolder, scanLibrary, isScanning } = useLibraryStore()
   const { addToast } = useUIStore()
+
+  // Grid layout:
+  // Row 0 to N-1: ROM folders - each has [Open(0), Remove(1)]
+  // Row N: Action buttons - [Add Folder(0), Rescan(1)] or just [Add Folder(0)]
+  const actionRowCols = romFolders.length > 0 ? 2 : 1
+  const grid = {
+    rows: romFolders.length + 1,
+    cols: [...romFolders.map(() => 2), actionRowCols]
+  }
+
+  useEffect(() => {
+    onGridChange(grid)
+  }, [romFolders.length, onGridChange])
 
   const handleAddFolder = async () => {
     const defaultPath = romFolders.length > 0 ? romFolders[romFolders.length - 1] : undefined
@@ -194,6 +289,82 @@ function LibrarySettings() {
     await scanLibrary()
     addToast('success', 'Library scan complete')
   }
+
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    const actionRowIndex = romFolders.length
+    
+    if (focusedRow < actionRowIndex) {
+      // Folder row
+      const folder = romFolders[focusedRow]
+      if (focusedCol === 0) {
+        window.electronAPI.shell.openPath(folder)
+      } else if (focusedCol === 1) {
+        removeRomFolder(folder)
+        addToast('info', 'Folder removed')
+        // Adjust focus if we removed a row
+        if (focusedRow >= romFolders.length - 1 && focusedRow > 0) {
+          onFocusChange(focusedRow - 1, 0)
+        }
+      }
+    } else {
+      // Action row
+      if (focusedCol === 0) {
+        handleAddFolder()
+      } else if (focusedCol === 1 && romFolders.length > 0) {
+        handleScan()
+      }
+    }
+  }, [focusedRow, focusedCol, romFolders, removeRomFolder, addToast, onFocusChange, justActivatedRef])
+
+  const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    const maxRow = grid.rows - 1
+    const maxColInRow = grid.cols[focusedRow] - 1
+
+    if (direction === 'up') {
+      if (focusedRow === 0) {
+        onBack()
+      } else {
+        // Move up, clamp column to new row's max
+        const newRow = focusedRow - 1
+        const newMaxCol = grid.cols[newRow] - 1
+        onFocusChange(newRow, Math.min(focusedCol, newMaxCol))
+      }
+    } else if (direction === 'down') {
+      if (focusedRow < maxRow) {
+        const newRow = focusedRow + 1
+        const newMaxCol = grid.cols[newRow] - 1
+        onFocusChange(newRow, Math.min(focusedCol, newMaxCol))
+      }
+    } else if (direction === 'left') {
+      if (focusedCol > 0) {
+        onFocusChange(focusedRow, focusedCol - 1)
+      } else {
+        onBack()
+      }
+    } else if (direction === 'right') {
+      if (focusedCol < maxColInRow) {
+        onFocusChange(focusedRow, focusedCol + 1)
+      }
+    }
+  }, [focusedRow, focusedCol, grid, onFocusChange, onBack])
+
+  useGamepadNavigation({
+    enabled: isFocused,
+    onNavigate: handleNavigate,
+    onConfirm: handleConfirm,
+    onBack,
+    scrollRef
+  })
+
+  // Helper to check if a cell is focused
+  const isCellFocused = (row: number, col: number) => {
+    return isFocused && focusedRow === row && focusedCol === col
+  }
+
+  const actionRowIndex = romFolders.length
 
   return (
     <div>
@@ -211,7 +382,7 @@ function LibrarySettings() {
               No folders added yet
             </div>
           ) : (
-            romFolders.map(folder => (
+            romFolders.map((folder, rowIndex) => (
               <div
                 key={folder}
                 className="flex items-center justify-between bg-surface-800 rounded-lg px-4 py-3"
@@ -219,18 +390,30 @@ function LibrarySettings() {
                 <span className="font-mono text-sm truncate flex-1">{folder}</span>
                 <div className="flex items-center gap-2 ml-4">
                   <button
+                    data-focus-row={rowIndex}
+                    data-focus-col={0}
                     onClick={() => window.electronAPI.shell.openPath(folder)}
-                    className="p-2 hover:bg-surface-700 rounded"
+                    className={`p-2 rounded transition-all ${
+                      isCellFocused(rowIndex, 0)
+                        ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                        : 'hover:bg-surface-700'
+                    }`}
                     title="Open folder"
                   >
                     <ExternalLink size={16} />
                   </button>
                   <button
+                    data-focus-row={rowIndex}
+                    data-focus-col={1}
                     onClick={() => {
                       removeRomFolder(folder)
                       addToast('info', 'Folder removed')
                     }}
-                    className="p-2 hover:bg-red-500/20 text-red-400 rounded"
+                    className={`p-2 rounded transition-all ${
+                      isCellFocused(rowIndex, 1)
+                        ? 'bg-red-500 text-white ring-2 ring-red-400 scale-105'
+                        : 'hover:bg-red-500/20 text-red-400'
+                    }`}
                     title="Remove folder"
                   >
                     <Trash2 size={16} />
@@ -243,17 +426,29 @@ function LibrarySettings() {
 
         <div className="flex gap-3">
           <button
+            data-focus-row={actionRowIndex}
+            data-focus-col={0}
             onClick={handleAddFolder}
-            className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg transition-all"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+              isCellFocused(actionRowIndex, 0)
+                ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                : 'bg-accent hover:bg-accent-hover'
+            }`}
           >
             <Plus size={18} />
             Add Folder
           </button>
           {romFolders.length > 0 && (
             <button
+              data-focus-row={actionRowIndex}
+              data-focus-col={1}
               onClick={handleScan}
               disabled={isScanning || romFolders.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
+                isCellFocused(actionRowIndex, 1)
+                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 hover:bg-surface-600'
+              }`}
             >
               <RefreshCw size={18} className={isScanning ? 'spinner' : ''} />
               {isScanning ? 'Scanning...' : 'Rescan Library'}
@@ -266,7 +461,7 @@ function LibrarySettings() {
 }
 
 // Emulators Settings Section
-function EmulatorsSettings() {
+function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const [emulators, setEmulators] = useState<EmulatorInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [versionCache, setVersionCache] = useState<Record<string, string>>({})
@@ -274,6 +469,42 @@ function EmulatorsSettings() {
   const [enabled, setEnabled] = useState<Record<string, boolean>>({})
   const { addToast } = useUIStore()
   const refreshPlatformsWithEmulator = useLibraryStore(s => s.refreshPlatformsWithEmulator)
+  
+  // Platform selector dropdown state
+  const [openPlatformId, setOpenPlatformId] = useState<string | null>(null)
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState(0)
+  
+  // Platform grid layout - 3 columns on large screens
+  const PLATFORM_GRID_COLS = 3
+  const platformCount = PLATFORMS.length
+  
+  // Navigation layout (using row for section, col for position within section):
+  // Row 0: Re-detect button (col ignored)
+  // Row 1: Platform grid (col = platform index within grid)
+  // Row 2+: Emulator cards (col ignored, row-2 = emulator index)
+  const emulatorStartRow = 2
+  const itemCount = emulatorStartRow + emulators.length
+  
+  useEffect(() => {
+    // Col count: row 0 = 1, row 1 = platformCount, row 2+ = 1 each
+    const cols = [1, platformCount, ...Array(emulators.length).fill(1)]
+    onGridChange({ rows: itemCount, cols })
+  }, [itemCount, platformCount, emulators.length, onGridChange])
+
+  // Get current section info
+  const getCurrentSection = () => {
+    if (focusedRow === 0) return 'redetect'
+    if (focusedRow === 1) return 'platforms'
+    return 'emulators'
+  }
+  
+  const currentSection = getCurrentSection()
+  const focusedPlatformIndex = currentSection === 'platforms' ? focusedCol : -1
+  const focusedEmulatorIndex = currentSection === 'emulators' ? focusedRow - emulatorStartRow : -1
+  const focusedEmulator = focusedEmulatorIndex >= 0 ? emulators[focusedEmulatorIndex] : null
+  
+  // Check if we're in dropdown selection mode
+  const isDropdownOpen = openPlatformId !== null
 
   const loadEmulators = async () => {
     setLoading(true)
@@ -382,18 +613,236 @@ function EmulatorsSettings() {
       e => e.installed && (enabled[e.id] !== false) && e.platforms.includes(platformId)
     )
 
+  // Helper to check if a section/item is focused
+  const isRedetectFocused = () => isFocused && focusedRow === 0 && !isDropdownOpen
+  const isPlatformFocused = (platformIndex: number) => isFocused && focusedRow === 1 && focusedCol === platformIndex && !isDropdownOpen
+  const isEmulatorFocused = (emulatorIndex: number) => isFocused && focusedRow === emulatorStartRow + emulatorIndex && !isDropdownOpen
+  const isEmulatorButtonFocused = (emulatorIndex: number, buttonIndex: number) => 
+    isEmulatorFocused(emulatorIndex) && focusedCol === buttonIndex
+  
+  // Get available buttons for an emulator (returns array of button types)
+  const getEmulatorButtons = useCallback((emu: EmulatorInfo): ('browse' | 'clear' | 'settings' | 'download')[] => {
+    const buttons: ('browse' | 'clear' | 'settings' | 'download')[] = ['browse']
+    if (emu.path) buttons.push('clear')
+    if (emu.installed) buttons.push('settings')
+    if (!emu.installed && emu.downloadUrl) buttons.push('download')
+    return buttons
+  }, [])
+
+  // Get options for a platform (with "Default" as first option)
+  const getOptionsForPlatform = useCallback((platformId: string) => {
+    const emus = installedForPlatform(platformId)
+    return [
+      { id: '', name: 'Default (first installed)' },
+      ...emus.map(e => ({ id: e.id, name: e.name }))
+    ]
+  }, [emulators, enabled])
+
+  // Open dropdown for a platform
+  const openDropdown = useCallback((platformId: string) => {
+    const options = getOptionsForPlatform(platformId)
+    const currentValue = defaults[platformId] ?? ''
+    const currentIndex = options.findIndex(o => o.id === currentValue)
+    setOpenPlatformId(platformId)
+    setSelectedOptionIndex(currentIndex >= 0 ? currentIndex : 0)
+  }, [defaults, getOptionsForPlatform])
+
+  // Close dropdown without saving
+  const closeDropdown = useCallback(() => {
+    setOpenPlatformId(null)
+    setSelectedOptionIndex(0)
+  }, [])
+
+  // Confirm dropdown selection
+  const confirmDropdownSelection = useCallback(() => {
+    if (!openPlatformId) return
+    const options = getOptionsForPlatform(openPlatformId)
+    const selectedOption = options[selectedOptionIndex]
+    if (selectedOption) {
+      handleDefaultChange(openPlatformId, selectedOption.id)
+    }
+    closeDropdown()
+  }, [openPlatformId, selectedOptionIndex, getOptionsForPlatform, closeDropdown])
+
+  // Handle gamepad confirmation
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    // If dropdown is open, confirm selection
+    if (isDropdownOpen) {
+      confirmDropdownSelection()
+      return
+    }
+    
+    if (currentSection === 'redetect') {
+      loadEmulators()
+      loadConfig()
+      refreshPlatformsWithEmulator()
+    } else if (currentSection === 'platforms') {
+      const platform = PLATFORMS[focusedPlatformIndex]
+      if (platform) {
+        openDropdown(platform.id)
+      }
+    } else if (focusedEmulator) {
+      // Get the buttons for this emulator and execute the focused one
+      const buttons = getEmulatorButtons(focusedEmulator)
+      const buttonType = buttons[focusedCol] || 'browse'
+      
+      switch (buttonType) {
+        case 'browse':
+          handleBrowse(focusedEmulator.id)
+          break
+        case 'clear':
+          handleClear(focusedEmulator.id)
+          break
+        case 'settings':
+          handleOpenSettings(focusedEmulator.id)
+          break
+        case 'download':
+          if (focusedEmulator.downloadUrl) {
+            handleDownload(focusedEmulator.downloadUrl)
+          }
+          break
+      }
+    }
+  }, [currentSection, focusedPlatformIndex, focusedEmulator, focusedCol, refreshPlatformsWithEmulator, justActivatedRef, isDropdownOpen, confirmDropdownSelection, openDropdown, getEmulatorButtons])
+
+  // Handle back button
+  const handleBackButton = useCallback(() => {
+    if (isDropdownOpen) {
+      closeDropdown()
+    } else {
+      onBack()
+    }
+  }, [isDropdownOpen, closeDropdown, onBack])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isFocused,
+    onNavigate: (direction) => {
+      // If dropdown is open, navigate within dropdown
+      if (isDropdownOpen && openPlatformId) {
+        const options = getOptionsForPlatform(openPlatformId)
+        if (direction === 'up') {
+          setSelectedOptionIndex(prev => Math.max(0, prev - 1))
+        } else if (direction === 'down') {
+          setSelectedOptionIndex(prev => Math.min(options.length - 1, prev + 1))
+        }
+        return
+      }
+      
+      // Grid navigation for platforms section
+      if (currentSection === 'platforms') {
+        const currentGridRow = Math.floor(focusedCol / PLATFORM_GRID_COLS)
+        const currentGridCol = focusedCol % PLATFORM_GRID_COLS
+        
+        if (direction === 'up') {
+          if (currentGridRow === 0) {
+            // Move to redetect button
+            onFocusChange(0, 0)
+          } else {
+            // Move up one row in grid
+            const newIndex = (currentGridRow - 1) * PLATFORM_GRID_COLS + currentGridCol
+            onFocusChange(1, Math.min(newIndex, platformCount - 1))
+          }
+        } else if (direction === 'down') {
+          const newGridRow = currentGridRow + 1
+          const newIndex = newGridRow * PLATFORM_GRID_COLS + currentGridCol
+          if (newIndex < platformCount) {
+            // Move down one row in grid
+            onFocusChange(1, newIndex)
+          } else {
+            // Move to emulators section
+            if (emulators.length > 0) {
+              onFocusChange(emulatorStartRow, 0)
+            }
+          }
+        } else if (direction === 'left') {
+          if (currentGridCol === 0) {
+            // At left edge - go back
+            onBack()
+          } else {
+            // Move left in grid
+            onFocusChange(1, focusedCol - 1)
+          }
+        } else if (direction === 'right') {
+          if (focusedCol < platformCount - 1) {
+            // Move right in grid
+            onFocusChange(1, focusedCol + 1)
+          }
+        }
+        return
+      }
+      
+      // Emulator section navigation (with left/right for buttons)
+      if (currentSection === 'emulators' && focusedEmulator) {
+        const buttons = getEmulatorButtons(focusedEmulator)
+        const maxCol = buttons.length - 1
+        
+        if (direction === 'up') {
+          if (focusedRow === emulatorStartRow) {
+            // From first emulator, go to last row of platform grid
+            const lastPlatformIndex = platformCount - 1
+            onFocusChange(1, lastPlatformIndex)
+          } else {
+            onFocusChange(focusedRow - 1, 0)
+          }
+        } else if (direction === 'down') {
+          if (focusedRow < itemCount - 1) {
+            onFocusChange(focusedRow + 1, 0)
+          }
+        } else if (direction === 'left') {
+          if (focusedCol > 0) {
+            onFocusChange(focusedRow, focusedCol - 1)
+          } else {
+            onBack()
+          }
+        } else if (direction === 'right') {
+          if (focusedCol < maxCol) {
+            onFocusChange(focusedRow, focusedCol + 1)
+          }
+        }
+        return
+      }
+      
+      // Normal linear navigation for redetect
+      if (direction === 'up') {
+        if (focusedRow === 0) {
+          onBack()
+        }
+      } else if (direction === 'down') {
+        if (focusedRow === 0) {
+          // From redetect, go to first platform
+          onFocusChange(1, 0)
+        }
+      } else if (direction === 'left') {
+        onBack()
+      }
+    },
+    onConfirm: handleConfirm,
+    onBack: handleBackButton,
+    scrollRef
+  })
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Emulator Settings</h2>
         <button
+          data-focus-row={0}
+          data-focus-col={0}
           onClick={async () => {
             await loadEmulators()
             loadConfig()
             await refreshPlatformsWithEmulator()
           }}
           disabled={loading}
-          className="flex items-center gap-2 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+          className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-all ${
+            isRedetectFocused()
+              ? 'bg-accent text-white ring-2 ring-accent scale-105'
+              : 'bg-surface-700 hover:bg-surface-600'
+          }`}
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           Re-detect All
@@ -407,21 +856,66 @@ function EmulatorsSettings() {
           Choose which emulator to use for each platform when a game has no specific override.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {PLATFORMS.map(p => {
-            const options = installedForPlatform(p.id)
+          {PLATFORMS.map((p, index) => {
+            const options = getOptionsForPlatform(p.id)
+            const isThisPlatformFocused = isPlatformFocused(index)
+            const isThisDropdownOpen = openPlatformId === p.id
+            const currentEmulator = defaults[p.id] ? options.find(e => e.id === defaults[p.id]) : null
+            const displayValue = currentEmulator?.name ?? 'Default (first installed)'
+            
             return (
-              <div key={p.id} className="bg-surface-800 rounded-lg px-4 py-3">
+              <div 
+                key={p.id} 
+                data-focus-row={1}
+                data-focus-col={index}
+                className={`bg-surface-800 rounded-lg px-4 py-3 transition-all relative ${
+                  isThisPlatformFocused || isThisDropdownOpen ? 'ring-2 ring-accent' : ''
+                } ${isThisPlatformFocused ? 'scale-[1.02]' : ''}`}
+              >
                 <label className="block text-sm font-medium mb-1">{p.shortName}</label>
-                <select
-                  value={defaults[p.id] ?? ''}
-                  onChange={e => handleDefaultChange(p.id, e.target.value)}
-                  className="w-full bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm"
-                >
-                  <option value="">Default (first installed)</option>
-                  {options.map(emu => (
-                    <option key={emu.id} value={emu.id}>{emu.name}</option>
-                  ))}
-                </select>
+                
+                {isThisDropdownOpen ? (
+                  // Dropdown open - show options list
+                  <div className="bg-surface-900 border border-accent rounded overflow-hidden">
+                    {options.map((opt, optIndex) => (
+                      <div
+                        key={opt.id}
+                        className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
+                          optIndex === selectedOptionIndex
+                            ? 'bg-accent text-white'
+                            : 'hover:bg-surface-800'
+                        }`}
+                        onClick={() => {
+                          setSelectedOptionIndex(optIndex)
+                          handleDefaultChange(p.id, opt.id)
+                          closeDropdown()
+                        }}
+                      >
+                        {opt.name}
+                      </div>
+                    ))}
+                  </div>
+                ) : isThisPlatformFocused ? (
+                  // Gamepad-focused but not open - show current value with hint
+                  <div 
+                    className="flex items-center justify-between bg-surface-900 border border-accent rounded px-3 py-2 text-sm cursor-pointer"
+                    onClick={() => openDropdown(p.id)}
+                  >
+                    <span className="truncate">{displayValue}</span>
+                    <span className="text-accent text-xs ml-2">Press A</span>
+                  </div>
+                ) : (
+                  // Regular select for mouse/keyboard
+                  <select
+                    value={defaults[p.id] ?? ''}
+                    onChange={e => handleDefaultChange(p.id, e.target.value)}
+                    className="w-full bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm"
+                  >
+                    {options.map(opt => (
+                      <option key={opt.id} value={opt.id}>{opt.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
             )
           })}
@@ -437,75 +931,109 @@ function EmulatorsSettings() {
           </div>
         ) : (
           <div className="space-y-4">
-            {emulators.map(emu => (
-              <div key={emu.id} className="bg-surface-800 rounded-lg p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h4 className="font-semibold text-lg">{emu.name}</h4>
-                    <p className="text-surface-400 text-sm">{getPlatformNames(emu.platforms)}</p>
+            {emulators.map((emu, index) => {
+              const rowIndex = emulatorStartRow + index
+              const isThisEmulatorFocused = isEmulatorFocused(index)
+              return (
+                <div 
+                  key={emu.id} 
+                  data-focus-row={rowIndex}
+                  data-focus-col={0}
+                  className={`bg-surface-800 rounded-lg p-4 transition-all ${
+                    isThisEmulatorFocused ? 'ring-2 ring-accent' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h4 className="font-semibold text-lg">{emu.name}</h4>
+                      <p className="text-surface-400 text-sm">{getPlatformNames(emu.platforms)}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 rounded">
+                        <input
+                          type="checkbox"
+                          checked={enabled[emu.id] !== false}
+                          onChange={e => handleEnabledChange(emu.id, e.target.checked)}
+                          className="w-4 h-4 accent-accent"
+                        />
+                        <span>Enabled</span>
+                      </label>
+                      <span className={`flex items-center gap-1 text-sm ${emu.installed ? 'text-green-400' : 'text-surface-400'}`}>
+                        {emu.installed ? <Check size={16} /> : <X size={16} />}
+                        {emu.installed ? 'Installed' : 'Not Installed'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={enabled[emu.id] !== false}
-                        onChange={e => handleEnabledChange(emu.id, e.target.checked)}
-                        className="w-4 h-4 accent-accent"
-                      />
-                      <span>Enabled</span>
-                    </label>
-                    <span className={`flex items-center gap-1 text-sm ${emu.installed ? 'text-green-400' : 'text-surface-400'}`}>
-                      {emu.installed ? <Check size={16} /> : <X size={16} />}
-                      {emu.installed ? 'Installed' : 'Not Installed'}
-                    </span>
-                  </div>
-                </div>
 
-                {emu.path && (
-                  <div className="flex items-center gap-2 text-sm text-surface-400 mb-2">
-                    <span className="font-mono truncate flex-1">{emu.path}</span>
-                    {versionCache[emu.id] !== undefined && (
-                      <span className="text-surface-500">Version: {versionCache[emu.id]}</span>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleBrowse(emu.id)}
-                    className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
-                  >
-                    Browse
-                  </button>
                   {emu.path && (
-                    <button
-                      onClick={() => handleClear(emu.id)}
-                      className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm flex items-center gap-1"
-                    >
-                      <XCircle size={14} />
-                      Clear
-                    </button>
+                    <div className="flex items-center gap-2 text-sm text-surface-400 mb-2">
+                      <span className="font-mono truncate flex-1">{emu.path}</span>
+                      {versionCache[emu.id] !== undefined && (
+                        <span className="text-surface-500">Version: {versionCache[emu.id]}</span>
+                      )}
+                    </div>
                   )}
-                  {emu.installed && (
-                    <button
-                      onClick={() => handleOpenSettings(emu.id)}
-                      className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm flex items-center gap-1"
-                    >
-                      <Settings2 size={14} />
-                      Open {emu.name} Settings
-                    </button>
-                  )}
-                  {!emu.installed && emu.downloadUrl && (
-                    <button
-                      onClick={() => handleDownload(emu.downloadUrl!)}
-                      className="px-3 py-1.5 bg-accent hover:bg-accent-hover rounded text-sm"
-                    >
-                      Download
-                    </button>
-                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {(() => {
+                      let buttonIdx = 0
+                      return (
+                        <>
+                          <button
+                            onClick={() => handleBrowse(emu.id)}
+                            className={`px-3 py-1.5 rounded text-sm transition-all ${
+                              isEmulatorButtonFocused(index, buttonIdx++)
+                                ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                                : 'bg-surface-700 hover:bg-surface-600'
+                            }`}
+                          >
+                            Browse
+                          </button>
+                          {emu.path && (
+                            <button
+                              onClick={() => handleClear(emu.id)}
+                              className={`px-3 py-1.5 rounded text-sm flex items-center gap-1 transition-all ${
+                                isEmulatorButtonFocused(index, buttonIdx++)
+                                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                                  : 'bg-surface-700 hover:bg-surface-600'
+                              }`}
+                            >
+                              <XCircle size={14} />
+                              Clear
+                            </button>
+                          )}
+                          {emu.installed && (
+                            <button
+                              onClick={() => handleOpenSettings(emu.id)}
+                              className={`px-3 py-1.5 rounded text-sm flex items-center gap-1 transition-all ${
+                                isEmulatorButtonFocused(index, buttonIdx++)
+                                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                                  : 'bg-surface-700 hover:bg-surface-600'
+                              }`}
+                            >
+                              <Settings2 size={14} />
+                              Open {emu.name} Settings
+                            </button>
+                          )}
+                          {!emu.installed && emu.downloadUrl && (
+                            <button
+                              onClick={() => handleDownload(emu.downloadUrl!)}
+                              className={`px-3 py-1.5 rounded text-sm transition-all ${
+                                isEmulatorButtonFocused(index, buttonIdx++)
+                                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                                  : 'bg-accent hover:bg-accent-hover'
+                              }`}
+                            >
+                              Download
+                            </button>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>
@@ -514,10 +1042,16 @@ function EmulatorsSettings() {
 }
 
 // BIOS Settings Section
-function BiosSettings() {
+function BiosSettings({ isFocused, focusedRow, focusedCol: _focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const [biosFiles, setBiosFiles] = useState<BiosStatus[]>([])
   const [loading, setLoading] = useState(true)
   const { addToast } = useUIStore()
+
+  // Simple single-column navigation
+  const itemCount = biosFiles.length
+  useEffect(() => {
+    onGridChange({ rows: itemCount, cols: Array(itemCount).fill(1) })
+  }, [itemCount, onGridChange])
 
   const loadBiosStatus = async () => {
     setLoading(true)
@@ -547,6 +1081,40 @@ function BiosSettings() {
     }
   }
 
+  // Handle gamepad confirmation
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    const bios = biosFiles[focusedRow]
+    if (bios) {
+      handleBrowse(bios.id)
+    }
+  }, [focusedRow, biosFiles, justActivatedRef])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isFocused,
+    onNavigate: (direction) => {
+      if (direction === 'up') {
+        if (focusedRow === 0) {
+          onBack()
+        } else {
+          onFocusChange(focusedRow - 1, 0)
+        }
+      } else if (direction === 'down') {
+        if (focusedRow < itemCount - 1) {
+          onFocusChange(focusedRow + 1, 0)
+        }
+      } else if (direction === 'left') {
+        onBack()
+      }
+    },
+    onConfirm: handleConfirm,
+    onBack,
+    scrollRef
+  })
+
   return (
     <div>
       <h2 className="text-2xl font-bold mb-6">BIOS & System Files</h2>
@@ -569,8 +1137,15 @@ function BiosSettings() {
         </div>
       ) : (
         <div className="space-y-4">
-          {biosFiles.map(bios => (
-            <div key={bios.id} className="bg-surface-800 rounded-lg p-4">
+          {biosFiles.map((bios, index) => (
+            <div 
+              key={bios.id}
+              data-focus-row={index}
+              data-focus-col={0}
+              className={`bg-surface-800 rounded-lg p-4 transition-all ${
+                isFocused && index === focusedRow ? 'ring-2 ring-accent' : ''
+              }`}
+            >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-3">
                   <h3 className="font-semibold">{bios.name}</h3>
@@ -600,7 +1175,11 @@ function BiosSettings() {
 
               <button
                 onClick={() => handleBrowse(bios.id)}
-                className="px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+                className={`px-3 py-1.5 rounded text-sm transition-all ${
+                  isFocused && index === focusedRow
+                    ? 'bg-accent text-white scale-105'
+                    : 'bg-surface-700 hover:bg-surface-600'
+                }`}
               >
                 Browse
               </button>
@@ -613,7 +1192,7 @@ function BiosSettings() {
 }
 
 // Paths Settings Section
-function PathsSettings() {
+function PathsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const [paths, setPaths] = useState({
     savesPath: '',
     statesPath: '',
@@ -622,6 +1201,18 @@ function PathsSettings() {
   })
   const [loading, setLoading] = useState(true)
   const { addToast } = useUIStore()
+
+  const pathItems = [
+    { key: 'savesPath' as const, label: 'Save Data' },
+    { key: 'statesPath' as const, label: 'Save States' },
+    { key: 'screenshotsPath' as const, label: 'Screenshots' },
+    { key: 'coversPath' as const, label: 'Cover Art' }
+  ]
+
+  // Grid: 4 rows, 2 columns each (Browse, Open)
+  useEffect(() => {
+    onGridChange({ rows: 4, cols: [2, 2, 2, 2] })
+  }, [onGridChange])
 
   useEffect(() => {
     const loadPaths = async () => {
@@ -652,12 +1243,56 @@ function PathsSettings() {
     }
   }
 
-  const pathItems = [
-    { key: 'savesPath' as const, label: 'Save Data' },
-    { key: 'statesPath' as const, label: 'Save States' },
-    { key: 'screenshotsPath' as const, label: 'Screenshots' },
-    { key: 'coversPath' as const, label: 'Cover Art' }
-  ]
+  // Helper to check if cell is focused
+  const isCellFocused = (row: number, col: number) => {
+    return isFocused && focusedRow === row && focusedCol === col
+  }
+
+  // Handle gamepad confirmation
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    const pathKey = pathItems[focusedRow]?.key
+    if (!pathKey) return
+    
+    if (focusedCol === 0) {
+      handleBrowse(pathKey)
+    } else {
+      window.electronAPI.shell.openPath(paths[pathKey])
+    }
+  }, [focusedRow, focusedCol, paths, pathItems, justActivatedRef])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isFocused,
+    onNavigate: (direction) => {
+      if (direction === 'up') {
+        if (focusedRow === 0) {
+          onBack()
+        } else {
+          onFocusChange(focusedRow - 1, focusedCol)
+        }
+      } else if (direction === 'down') {
+        if (focusedRow < 3) {
+          onFocusChange(focusedRow + 1, focusedCol)
+        }
+      } else if (direction === 'left') {
+        if (focusedCol > 0) {
+          onFocusChange(focusedRow, focusedCol - 1)
+        } else {
+          onBack()
+        }
+      } else if (direction === 'right') {
+        if (focusedCol < 1) {
+          onFocusChange(focusedRow, focusedCol + 1)
+        }
+      }
+    },
+    onConfirm: handleConfirm,
+    onBack,
+    scrollRef
+  })
 
   if (loading) {
     return (
@@ -672,7 +1307,7 @@ function PathsSettings() {
       <h2 className="text-2xl font-bold mb-6">Paths</h2>
 
       <div className="space-y-4">
-        {pathItems.map(item => (
+        {pathItems.map((item, rowIndex) => (
           <div key={item.key} className="bg-surface-800 rounded-lg p-4">
             <label className="block text-sm font-medium mb-2">{item.label}</label>
             <div className="flex gap-2">
@@ -683,14 +1318,26 @@ function PathsSettings() {
                 className="flex-1 bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm font-mono"
               />
               <button
+                data-focus-row={rowIndex}
+                data-focus-col={0}
                 onClick={() => handleBrowse(item.key)}
-                className="px-3 py-2 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+                className={`px-3 py-2 rounded text-sm transition-all ${
+                  isCellFocused(rowIndex, 0)
+                    ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                    : 'bg-surface-700 hover:bg-surface-600'
+                }`}
               >
                 Browse
               </button>
               <button
+                data-focus-row={rowIndex}
+                data-focus-col={1}
                 onClick={() => window.electronAPI.shell.openPath(paths[item.key])}
-                className="px-3 py-2 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+                className={`px-3 py-2 rounded text-sm transition-all ${
+                  isCellFocused(rowIndex, 1)
+                    ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                    : 'bg-surface-700 hover:bg-surface-600'
+                }`}
               >
                 Open
               </button>
@@ -703,11 +1350,16 @@ function PathsSettings() {
 }
 
 // Metadata Settings Section
-function MetadataSettings() {
+function MetadataSettings({ isFocused, focusedRow, focusedCol: _focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const { addToast } = useUIStore()
   const { scrapeAllGames, cancelScrape, isScraping, scrapeProgress, games, loadLibrary } = useLibraryStore()
   const [autoScrape, setAutoScrape] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  // Simple 2-row navigation: autoScrape checkbox, scrape all/cancel button
+  useEffect(() => {
+    onGridChange({ rows: 2, cols: [1, 1] })
+  }, [onGridChange])
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -746,6 +1398,50 @@ function MetadataSettings() {
     addToast('info', 'Scraping cancelled')
   }
 
+  // Helper to check if row is focused
+  const isRowFocused = (row: number) => {
+    return isFocused && focusedRow === row
+  }
+
+  // Handle gamepad confirmation
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    if (focusedRow === 0) {
+      handleAutoScrapeChange(!autoScrape)
+    } else if (focusedRow === 1) {
+      if (isScraping) {
+        handleCancelScrape()
+      } else {
+        handleScrapeAll()
+      }
+    }
+  }, [focusedRow, autoScrape, isScraping, justActivatedRef])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isFocused,
+    onNavigate: (direction) => {
+      if (direction === 'up') {
+        if (focusedRow === 0) {
+          onBack()
+        } else {
+          onFocusChange(focusedRow - 1, 0)
+        }
+      } else if (direction === 'down') {
+        if (focusedRow < 1) {
+          onFocusChange(focusedRow + 1, 0)
+        }
+      } else if (direction === 'left') {
+        onBack()
+      }
+    },
+    onConfirm: handleConfirm,
+    onBack,
+    scrollRef
+  })
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -760,7 +1456,12 @@ function MetadataSettings() {
 
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Automatic Metadata Lookup</h3>
-        <label className="flex items-center gap-3 cursor-pointer">
+        <label 
+          data-focus-row={0}
+          data-focus-col={0}
+          className={`flex items-center gap-3 cursor-pointer p-3 rounded-lg transition-all ${
+            isRowFocused(0) ? 'bg-surface-800 ring-2 ring-accent' : ''
+          }`}>
           <input
             type="checkbox"
             checked={autoScrape}
@@ -800,8 +1501,14 @@ function MetadataSettings() {
               {scrapeProgress.currentGame}
             </p>
             <button
+              data-focus-row={1}
+              data-focus-col={0}
               onClick={handleCancelScrape}
-              className="mt-3 px-3 py-1.5 bg-surface-700 hover:bg-surface-600 rounded text-sm"
+              className={`mt-3 px-3 py-1.5 rounded text-sm transition-all ${
+                isRowFocused(1)
+                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 hover:bg-surface-600'
+              }`}
             >
               Cancel
             </button>
@@ -810,9 +1517,15 @@ function MetadataSettings() {
 
         <div className="flex gap-3">
           <button
+            data-focus-row={1}
+            data-focus-col={0}
             onClick={handleScrapeAll}
             disabled={isScraping || games.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all ${
+              isRowFocused(1)
+                ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                : 'bg-accent hover:bg-accent-hover'
+            }`}
           >
             {isScraping ? (
               <>
@@ -841,13 +1554,18 @@ function MetadataSettings() {
 }
 
 // General Settings Section
-function GeneralSettings() {
+function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const { setFirstRun } = useAppStore()
   const { addToast } = useUIStore()
   const [startMinimized, setStartMinimized] = useState(false)
   const [checkUpdates, setCheckUpdates] = useState(true)
   const [version, setVersion] = useState('0.0.0')
   const [loading, setLoading] = useState(true)
+
+  // 4 rows: startMinimized, checkUpdates, checkForUpdates button, reset buttons (2 cols)
+  useEffect(() => {
+    onGridChange({ rows: 4, cols: [1, 1, 1, 2] })
+  }, [onGridChange])
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -880,6 +1598,63 @@ function GeneralSettings() {
     addToast('warning', 'This feature is not yet implemented')
   }
 
+  // Helper to check if cell is focused
+  const isCellFocused = (row: number, col: number = 0) => {
+    return isFocused && focusedRow === row && focusedCol === col
+  }
+
+  // Handle gamepad confirmation
+  const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
+    
+    if (focusedRow === 0) {
+      handleStartMinimizedChange(!startMinimized)
+    } else if (focusedRow === 1) {
+      handleCheckUpdatesChange(!checkUpdates)
+    } else if (focusedRow === 2) {
+      addToast('info', 'Update check not implemented yet')
+    } else if (focusedRow === 3) {
+      if (focusedCol === 0) {
+        setFirstRun(true)
+        addToast('info', 'Returning to setup wizard...')
+      } else {
+        handleResetDefaults()
+      }
+    }
+  }, [focusedRow, focusedCol, startMinimized, checkUpdates, setFirstRun, addToast, justActivatedRef])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isFocused,
+    onNavigate: (direction) => {
+      if (direction === 'up') {
+        if (focusedRow === 0) {
+          onBack()
+        } else {
+          onFocusChange(focusedRow - 1, 0)
+        }
+      } else if (direction === 'down') {
+        if (focusedRow < 3) {
+          onFocusChange(focusedRow + 1, 0)
+        }
+      } else if (direction === 'left') {
+        if (focusedRow === 3 && focusedCol > 0) {
+          onFocusChange(focusedRow, focusedCol - 1)
+        } else {
+          onBack()
+        }
+      } else if (direction === 'right') {
+        if (focusedRow === 3 && focusedCol < 1) {
+          onFocusChange(focusedRow, focusedCol + 1)
+        }
+      }
+    },
+    onConfirm: handleConfirm,
+    onBack,
+    scrollRef
+  })
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -894,7 +1669,13 @@ function GeneralSettings() {
 
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Startup</h3>
-        <label className="flex items-center gap-3 cursor-pointer">
+        <label 
+          data-focus-row={0}
+          data-focus-col={0}
+          className={`flex items-center gap-3 cursor-pointer p-2 rounded transition-all ${
+            isCellFocused(0) ? 'bg-surface-800 ring-2 ring-accent' : ''
+          }`}
+        >
           <input
             type="checkbox"
             checked={startMinimized}
@@ -903,7 +1684,13 @@ function GeneralSettings() {
           />
           <span>Start minimized to system tray</span>
         </label>
-        <label className="flex items-center gap-3 cursor-pointer mt-2">
+        <label 
+          data-focus-row={1}
+          data-focus-col={0}
+          className={`flex items-center gap-3 cursor-pointer mt-2 p-2 rounded transition-all ${
+            isCellFocused(1) ? 'bg-surface-800 ring-2 ring-accent' : ''
+          }`}
+        >
           <input
             type="checkbox"
             checked={checkUpdates}
@@ -918,8 +1705,14 @@ function GeneralSettings() {
         <h3 className="text-lg font-semibold mb-4">Updates</h3>
         <p className="text-surface-400 mb-4">Current version: {version}</p>
         <button
+          data-focus-row={2}
+          data-focus-col={0}
           onClick={() => addToast('info', 'Update check not implemented yet')}
-          className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg"
+          className={`px-4 py-2 rounded-lg transition-all ${
+            isCellFocused(2)
+              ? 'bg-accent text-white ring-2 ring-accent scale-105'
+              : 'bg-surface-700 hover:bg-surface-600'
+          }`}
         >
           Check for Updates
         </button>
@@ -929,17 +1722,29 @@ function GeneralSettings() {
         <h3 className="text-lg font-semibold mb-4">Reset</h3>
         <div className="flex gap-3">
           <button
+            data-focus-row={3}
+            data-focus-col={0}
             onClick={() => {
               setFirstRun(true)
               addToast('info', 'Returning to setup wizard...')
             }}
-            className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg"
+            className={`px-4 py-2 rounded-lg transition-all ${
+              isCellFocused(3, 0)
+                ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                : 'bg-surface-700 hover:bg-surface-600'
+            }`}
           >
             Re-run Setup Wizard
           </button>
           <button
+            data-focus-row={3}
+            data-focus-col={1}
             onClick={handleResetDefaults}
-            className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg"
+            className={`px-4 py-2 rounded-lg transition-all ${
+              isCellFocused(3, 1)
+                ? 'bg-red-500 text-white ring-2 ring-red-400 scale-105'
+                : 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
+            }`}
           >
             Reset to Defaults
           </button>
