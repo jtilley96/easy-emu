@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FolderOpen,
@@ -27,6 +27,8 @@ import { useUIStore } from '../store/uiStore'
 import CoreManagerSection from '../components/settings/CoreManagerSection'
 import ControllersSettings from '../components/settings/ControllersSettings'
 import { EmulatorInfo } from '../types'
+import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
+import { useLayoutContext } from '../components/Layout'
 
 interface BiosStatus {
   id: string
@@ -61,6 +63,73 @@ export default function Settings() {
   const { section } = useParams<{ section?: string }>()
   const navigate = useNavigate()
   const currentSection = (section as SettingsSection) || 'library'
+  const { isSidebarFocused, setIsSidebarFocused } = useLayoutContext()
+  const [focusedSectionIndex, setFocusedSectionIndex] = useState(0)
+  const [isSectionListFocused, setIsSectionListFocused] = useState(true)
+
+  // Update focused section index based on current route
+  useEffect(() => {
+    const currentIndex = NAV_ITEMS.findIndex(item => item.id === currentSection)
+    if (currentIndex >= 0) {
+      setFocusedSectionIndex(currentIndex)
+    }
+  }, [currentSection])
+
+  const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    if (isSidebarFocused) return
+
+    if (isSectionListFocused) {
+      // Navigate settings sections
+      if (direction === 'up') {
+        if (focusedSectionIndex === 0) {
+          // At top - return focus to main sidebar
+          setIsSidebarFocused(true)
+        } else {
+          setFocusedSectionIndex(prev => prev - 1)
+        }
+      } else if (direction === 'down') {
+        setFocusedSectionIndex(prev => Math.min(NAV_ITEMS.length - 1, prev + 1))
+      } else if (direction === 'right') {
+        // Move focus to content area
+        setIsSectionListFocused(false)
+      } else if (direction === 'left') {
+        // Return focus to main sidebar
+        setIsSidebarFocused(true)
+      }
+    } else {
+      // In content area - left goes back to section list
+      if (direction === 'left') {
+        setIsSectionListFocused(true)
+      } else if (direction === 'up') {
+        setIsSectionListFocused(true)
+      }
+    }
+  }, [isSidebarFocused, isSectionListFocused, focusedSectionIndex, setIsSidebarFocused])
+
+  const handleConfirm = useCallback(() => {
+    if (isSidebarFocused) return
+    if (isSectionListFocused) {
+      navigate(`/settings/${NAV_ITEMS[focusedSectionIndex].id}`)
+      setIsSectionListFocused(false)
+    }
+  }, [isSidebarFocused, isSectionListFocused, focusedSectionIndex, navigate])
+
+  const handleBack = useCallback(() => {
+    if (isSidebarFocused) return
+    if (isSectionListFocused) {
+      setIsSidebarFocused(true)
+    } else {
+      setIsSectionListFocused(true)
+    }
+  }, [isSidebarFocused, isSectionListFocused, setIsSidebarFocused])
+
+  // Gamepad navigation (only when page is focused)
+  useGamepadNavigation({
+    enabled: !isSidebarFocused,
+    onNavigate: handleNavigate,
+    onConfirm: handleConfirm,
+    onBack: handleBack
+  })
 
   return (
     <div className="flex h-full">
@@ -68,21 +137,27 @@ export default function Settings() {
       <nav className="w-56 bg-surface-900 border-r border-surface-800 p-4">
         <h2 className="text-lg font-semibold mb-4">Settings</h2>
         <ul className="space-y-1">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.id}>
-              <button
-                onClick={() => navigate(`/settings/${item.id}`)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all ${
-                  currentSection === item.id
-                    ? 'bg-accent text-white'
-                    : 'hover:bg-surface-800 text-surface-300'
-                }`}
-              >
-                {item.icon}
-                <span>{item.label}</span>
-              </button>
-            </li>
-          ))}
+          {NAV_ITEMS.map((item, index) => {
+            const isActive = currentSection === item.id
+            const isFocused = !isSidebarFocused && isSectionListFocused && index === focusedSectionIndex
+            return (
+              <li key={item.id}>
+                <button
+                  onClick={() => navigate(`/settings/${item.id}`)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all ${
+                    isActive
+                      ? 'bg-accent text-white'
+                      : isFocused
+                      ? 'bg-surface-800 text-white scale-[1.02] shadow-lg ring-2 ring-accent'
+                      : 'hover:bg-surface-800 text-surface-300'
+                  }`}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       </nav>
 

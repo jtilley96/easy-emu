@@ -9,6 +9,7 @@ import {
   FolderOpen
 } from 'lucide-react'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
+import { useLayoutContext } from './Layout'
 
 interface NavItem {
   to: string
@@ -46,6 +47,7 @@ export default function Sidebar() {
   const location = useLocation()
   const navigate = useNavigate()
   const [focusedIndex, setFocusedIndex] = useState(0)
+  const { isSidebarFocused, setIsSidebarFocused } = useLayoutContext()
 
   // Helper function to determine if a nav item is active
   const isItemActive = useCallback((item: NavItem): boolean => {
@@ -92,25 +94,41 @@ export default function Sidebar() {
   }, [location.pathname, location.search, isItemActive])
 
   const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    if (!isSidebarFocused) return
+
     if (direction === 'up') {
       setFocusedIndex(prev => Math.max(0, prev - 1))
     } else if (direction === 'down') {
       setFocusedIndex(prev => Math.min(NAV_ITEMS.length - 1, prev + 1))
+    } else if (direction === 'right') {
+      // Move focus to page content
+      setIsSidebarFocused(false)
     }
-  }, [])
+  }, [isSidebarFocused, setIsSidebarFocused])
 
   const handleConfirm = useCallback(() => {
+    if (!isSidebarFocused) return
     const item = NAV_ITEMS[focusedIndex]
     if (item) {
       navigate(item.to)
+      // Move focus to page content after navigation
+      setIsSidebarFocused(false)
     }
-  }, [focusedIndex, navigate])
+  }, [focusedIndex, navigate, isSidebarFocused, setIsSidebarFocused])
 
-  // Gamepad navigation
+  const handleBack = useCallback(() => {
+    if (!isSidebarFocused) {
+      // If page is focused, move focus back to sidebar
+      setIsSidebarFocused(true)
+    }
+  }, [isSidebarFocused, setIsSidebarFocused])
+
+  // Gamepad navigation (only when sidebar is focused)
   useGamepadNavigation({
-    enabled: true,
+    enabled: isSidebarFocused,
     onNavigate: handleNavigate,
-    onConfirm: handleConfirm
+    onConfirm: handleConfirm,
+    onBack: handleBack
   })
 
   return (

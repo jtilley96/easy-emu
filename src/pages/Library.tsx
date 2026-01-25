@@ -1,10 +1,12 @@
-import { useState, useMemo, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Search, Grid, List, SlidersHorizontal, Star, Clock } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import GameCard from '../components/GameCard'
 import SearchBar from '../components/SearchBar'
+import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
+import { useLayoutContext } from '../components/Layout'
 
 type SortBy = 'title' | 'lastPlayed' | 'platform' | 'recentlyAdded'
 type QuickFilter = 'recent' | 'favorites' | null
@@ -12,6 +14,11 @@ type QuickFilter = 'recent' | 'favorites' | null
 export default function Library() {
   const { games, isScanning, loadLibrary } = useLibraryStore()
   const { libraryPlatformFilter, setLibraryPlatformFilter, libraryViewMode, setLibraryViewMode } = useUIStore()
+  const navigate = useNavigate()
+  const { isSidebarFocused, setIsSidebarFocused } = useLayoutContext()
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [focusedIndex, setFocusedIndex] = useState(0)
+  const [isHeaderFocused, setIsHeaderFocused] = useState(false)
   
   useEffect(() => {
     loadLibrary()
@@ -81,6 +88,164 @@ export default function Library() {
     return result
   }, [games, searchQuery, sortBy, libraryPlatformFilter, quickFilter])
 
+  // Reset focus when games change
+  useEffect(() => {
+    setFocusedIndex(0)
+    setIsHeaderFocused(false)
+  }, [filteredGames.length])
+
+  // Calculate columns based on viewport width
+  const getColumns = useCallback(() => {
+    if (!gridRef.current) return 6 // default
+    const width = gridRef.current.offsetWidth
+    // Match Tailwind breakpoints: 2, 3, 4, 5, 6, 8
+    if (width >= 1536) return 8 // 2xl
+    if (width >= 1280) return 6 // xl
+    if (width >= 1024) return 5 // lg
+    if (width >= 768) return 4  // md
+    if (width >= 640) return 3  // sm
+    return 2 // default
+  }, [])
+
+  // Handle gamepad navigation
+  const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    if (isSidebarFocused || filteredGames.length === 0) return
+
+    // If header is focused, handle header navigation
+    if (isHeaderFocused) {
+      switch (direction) {
+        case 'down':
+          // Move focus to game grid
+          setIsHeaderFocused(false)
+          setFocusedIndex(0)
+          break
+        case 'up':
+        case 'left':
+          // Return focus to sidebar
+          setIsHeaderFocused(false)
+          setIsSidebarFocused(true)
+          break
+      }
+      return
+    }
+
+    // Game grid navigation
+    const columns = libraryViewMode === 'grid' ? getColumns() : 1
+    const totalGames = filteredGames.length
+
+    let shouldMoveToHeader = false
+    let shouldMoveToSidebar = false
+
+    const newIndex = (() => {
+      let newIdx = focusedIndex
+
+      if (libraryViewMode === 'list') {
+        // List mode: simple up/down navigation
+        switch (direction) {
+          case 'up':
+            if (focusedIndex === 0) {
+              // At top - move focus to header controls
+              shouldMoveToHeader = true
+              return focusedIndex
+            }
+            newIdx = focusedIndex - 1
+            break
+          case 'down':
+            newIdx = Math.min(focusedIndex + 1, totalGames - 1)
+            break
+          case 'left':
+            shouldMoveToSidebar = true
+            return focusedIndex
+          case 'right':
+            // No-op in list mode
+            break
+        }
+      } else {
+        // Grid mode: grid navigation
+        switch (direction) {
+          case 'left':
+            if (focusedIndex % columns === 0) {
+              // At start of row - return focus to sidebar
+              shouldMoveToSidebar = true
+              return focusedIndex
+            }
+            newIdx = focusedIndex - 1
+            break
+          case 'right':
+            if ((focusedIndex + 1) % columns === 0 || focusedIndex === totalGames - 1) {
+              // At end of row or last item - wrap to start of next row
+              newIdx = focusedIndex < totalGames - 1 ? focusedIndex + 1 : 0
+            } else {
+              newIdx = focusedIndex + 1
+            }
+            break
+          case 'up':
+            if (focusedIndex - columns >= 0) {
+              newIdx = focusedIndex - columns
+            } else {
+              // At top row - move focus to header controls
+              shouldMoveToHeader = true
+              return focusedIndex
+            }
+            break
+          case 'down':
+            if (focusedIndex + columns < totalGames) {
+              newIdx = focusedIndex + columns
+            } else {
+              // At bottom row - wrap to top
+              const targetCol = focusedIndex % columns
+              newIdx = Math.min(targetCol, totalGames - 1)
+            }
+            break
+        }
+      }
+
+      return Math.max(0, Math.min(newIdx, totalGames - 1))
+    })()
+
+    // Update state separately to avoid render warnings
+    if (shouldMoveToHeader) {
+      setIsHeaderFocused(true)
+    } else if (shouldMoveToSidebar) {
+      setIsSidebarFocused(true)
+    } else {
+      setFocusedIndex(newIndex)
+    }
+  }, [isSidebarFocused, isHeaderFocused, focusedIndex, filteredGames.length, libraryViewMode, getColumns, setIsSidebarFocused])
+
+  const handleConfirm = useCallback(() => {
+    if (isSidebarFocused) return
+    if (isHeaderFocused) {
+      // Header controls are focused - could focus search bar or do nothing
+      // For now, just move focus to game grid
+      setIsHeaderFocused(false)
+      setFocusedIndex(0)
+      return
+    }
+    if (!filteredGames[focusedIndex]) return
+    navigate(`/game/${filteredGames[focusedIndex].id}`)
+  }, [isSidebarFocused, isHeaderFocused, focusedIndex, filteredGames, navigate])
+
+  const handleBack = useCallback(() => {
+    if (isSidebarFocused) return
+    if (isHeaderFocused) {
+      // From header, go back to sidebar
+      setIsHeaderFocused(false)
+      setIsSidebarFocused(true)
+    } else {
+      // From game grid, go directly to sidebar
+      setIsSidebarFocused(true)
+    }
+  }, [isSidebarFocused, isHeaderFocused, setIsSidebarFocused])
+
+  // Gamepad navigation (only when page is focused)
+  useGamepadNavigation({
+    enabled: !isSidebarFocused,
+    onNavigate: handleNavigate,
+    onConfirm: handleConfirm,
+    onBack: handleBack
+  })
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -98,7 +263,7 @@ export default function Library() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className={`flex items-center gap-3 ${isHeaderFocused ? 'ring-2 ring-accent rounded-lg p-1' : ''}`}>
           {/* Search */}
           <SearchBar
             value={searchQuery}
@@ -206,15 +371,28 @@ export default function Library() {
             )}
           </div>
         ) : libraryViewMode === 'grid' ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4">
-            {filteredGames.map(game => (
-              <GameCard key={game.id} game={game} />
+          <div 
+            ref={gridRef}
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4"
+          >
+            {filteredGames.map((game, index) => (
+              <div
+                key={game.id}
+                className={!isSidebarFocused && index === focusedIndex ? 'ring-2 ring-accent rounded-lg' : ''}
+              >
+                <GameCard game={game} />
+              </div>
             ))}
           </div>
         ) : (
-          <div className="space-y-2">
-            {filteredGames.map(game => (
-              <GameCard key={game.id} game={game} variant="list" />
+          <div className="space-y-2" ref={gridRef}>
+            {filteredGames.map((game, index) => (
+              <div
+                key={game.id}
+                className={!isSidebarFocused && index === focusedIndex ? 'ring-2 ring-accent rounded-lg' : ''}
+              >
+                <GameCard key={game.id} game={game} variant="list" />
+              </div>
             ))}
           </div>
         )}

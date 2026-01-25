@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Play,
@@ -25,6 +25,8 @@ import EditMetadataModal from '../components/EditMetadataModal'
 import GameSettingsModal from '../components/GameSettingsModal'
 import ScreenshotGallery from '../components/ScreenshotGallery'
 import { EmbeddedPlayCapability } from '../types'
+import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
+import { useLayoutContext } from '../components/Layout'
 
 export default function GameDetails() {
   const { id } = useParams<{ id: string }>()
@@ -32,6 +34,7 @@ export default function GameDetails() {
   const { games, launchGame, toggleFavorite, deleteGame, platformsWithEmulator, loadLibrary, scrapeGame, isScraping } = useLibraryStore()
   const { checkCanPlayEmbedded, preferEmbedded } = useEmulatorStore()
   const { addToast } = useUIStore()
+  const { isSidebarFocused, setIsSidebarFocused } = useLayoutContext()
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -40,6 +43,7 @@ export default function GameDetails() {
   const [scraping, setScraping] = useState(false)
   const [showPlayMenu, setShowPlayMenu] = useState(false)
   const [embeddedCapability, setEmbeddedCapability] = useState<EmbeddedPlayCapability | null>(null)
+  const [focusedButton, setFocusedButton] = useState<'play' | 'favorite' | 'scrape' | 'edit' | 'settings' | 'delete' | 'back'>('play')
 
   const game = games.find(g => g.id === id)
   const canPlayExternal = game ? platformsWithEmulator.includes(game.platform) : false
@@ -154,6 +158,68 @@ export default function GameDetails() {
     }
   }
 
+  // Gamepad navigation
+  const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    if (isSidebarFocused) return
+
+    const buttons: Array<'play' | 'favorite' | 'scrape' | 'edit' | 'settings' | 'delete' | 'back'> = ['play', 'favorite', 'scrape', 'edit', 'settings', 'delete', 'back']
+    const currentIndex = buttons.indexOf(focusedButton)
+
+    if (direction === 'left') {
+      if (currentIndex === 0) {
+        // At first button - return focus to sidebar
+        setIsSidebarFocused(true)
+      } else {
+        setFocusedButton(buttons[currentIndex - 1])
+      }
+    } else if (direction === 'right') {
+      setFocusedButton(buttons[Math.min(buttons.length - 1, currentIndex + 1)])
+    } else if (direction === 'up') {
+      setIsSidebarFocused(true)
+    }
+  }, [isSidebarFocused, focusedButton, setIsSidebarFocused])
+
+  const handleConfirm = useCallback(() => {
+    if (isSidebarFocused || !game) return
+
+    switch (focusedButton) {
+      case 'play':
+        handlePlay()
+        break
+      case 'favorite':
+        handleToggleFavorite()
+        break
+      case 'scrape':
+        handleScrapeMetadata()
+        break
+      case 'edit':
+        setShowEditModal(true)
+        break
+      case 'settings':
+        setShowGameSettingsModal(true)
+        break
+      case 'delete':
+        setShowDeleteConfirm(true)
+        break
+      case 'back':
+        navigate(-1)
+        break
+    }
+  }, [isSidebarFocused, focusedButton, game, handlePlay, handleToggleFavorite, handleScrapeMetadata, navigate])
+
+  const handleBack = useCallback(() => {
+    if (isSidebarFocused) return
+    setIsSidebarFocused(true)
+  }, [isSidebarFocused, setIsSidebarFocused])
+
+  // Gamepad navigation (only when page is focused)
+  useGamepadNavigation({
+    enabled: !isSidebarFocused,
+    onNavigate: handleNavigate,
+    onConfirm: handleConfirm,
+    onBack: handleBack
+  })
+
   return (
     <div className="h-full overflow-auto">
       {/* Hero Section */}
@@ -170,7 +236,9 @@ export default function GameDetails() {
         {/* Back button */}
         <button
           onClick={() => navigate(-1)}
-          className="absolute top-4 left-4 flex items-center gap-2 px-3 py-2 bg-surface-900/80 hover:bg-surface-800 rounded-lg backdrop-blur-sm"
+          className={`absolute top-4 left-4 flex items-center gap-2 px-3 py-2 bg-surface-900/80 hover:bg-surface-800 rounded-lg backdrop-blur-sm transition-all ${
+            !isSidebarFocused && focusedButton === 'back' ? 'ring-2 ring-accent scale-105' : ''
+          }`}
         >
           <ArrowLeft size={18} />
           <span>Back</span>
@@ -228,10 +296,12 @@ export default function GameDetails() {
                     onClick={handlePlay}
                     disabled={launching || !canPlay}
                     title={!canPlay ? noEmulatorTooltip : undefined}
-                    className={`flex items-center gap-2 px-6 py-3 font-semibold text-lg ${
+                    className={`flex items-center gap-2 px-6 py-3 font-semibold text-lg transition-all ${
                       canPlay ? 'bg-accent hover:bg-accent-hover' : 'bg-amber-600/80 hover:bg-amber-600'
                     } disabled:opacity-70 ${
                       canPlayEmbedded && canPlayExternal ? 'rounded-l-lg' : 'rounded-lg'
+                    } ${
+                      !isSidebarFocused && focusedButton === 'play' ? 'ring-2 ring-white scale-105' : ''
                     }`}
                   >
                     <Play size={24} fill="currentColor" />
@@ -278,10 +348,12 @@ export default function GameDetails() {
 
               <button
                 onClick={handleToggleFavorite}
-                className={`p-3 rounded-lg ${
+                className={`p-3 rounded-lg transition-all ${
                   game.isFavorite
                     ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30'
                     : 'bg-surface-800 hover:bg-surface-700'
+                } ${
+                  !isSidebarFocused && focusedButton === 'favorite' ? 'ring-2 ring-accent scale-105' : ''
                 }`}
                 title={game.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
               >
@@ -291,7 +363,9 @@ export default function GameDetails() {
               <button
                 onClick={handleScrapeMetadata}
                 disabled={scraping || isScraping}
-                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg disabled:opacity-50"
+                className={`p-3 bg-surface-800 hover:bg-surface-700 rounded-lg disabled:opacity-50 transition-all ${
+                  !isSidebarFocused && focusedButton === 'scrape' ? 'ring-2 ring-accent scale-105' : ''
+                }`}
                 title="Fetch metadata from Hasheous"
               >
                 {scraping ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
@@ -299,7 +373,9 @@ export default function GameDetails() {
 
               <button
                 onClick={() => setShowEditModal(true)}
-                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg"
+                className={`p-3 bg-surface-800 hover:bg-surface-700 rounded-lg transition-all ${
+                  !isSidebarFocused && focusedButton === 'edit' ? 'ring-2 ring-accent scale-105' : ''
+                }`}
                 title="Edit metadata"
               >
                 <Edit size={20} />
@@ -307,7 +383,9 @@ export default function GameDetails() {
 
               <button
                 onClick={() => setShowGameSettingsModal(true)}
-                className="p-3 bg-surface-800 hover:bg-surface-700 rounded-lg"
+                className={`p-3 bg-surface-800 hover:bg-surface-700 rounded-lg transition-all ${
+                  !isSidebarFocused && focusedButton === 'settings' ? 'ring-2 ring-accent scale-105' : ''
+                }`}
                 title="Game settings (emulator override)"
               >
                 <Settings2 size={20} />
@@ -315,7 +393,9 @@ export default function GameDetails() {
 
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="p-3 bg-surface-800 hover:bg-red-500/20 hover:text-red-400 rounded-lg"
+                className={`p-3 bg-surface-800 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition-all ${
+                  !isSidebarFocused && focusedButton === 'delete' ? 'ring-2 ring-accent scale-105' : ''
+                }`}
                 title="Remove from library"
               >
                 <Trash2 size={20} />
