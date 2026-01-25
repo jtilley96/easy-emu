@@ -16,6 +16,8 @@ export interface UseGamepadNavigationOptions {
   onStart?: () => void
   repeatDelay?: number   // ms before repeat starts
   repeatRate?: number    // ms between repeats
+  scrollRef?: React.RefObject<HTMLElement>  // Optional ref to scrollable container for right stick scrolling
+  scrollSpeed?: number   // Pixels per frame to scroll (default 8)
 }
 
 /**
@@ -32,13 +34,39 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
     onOption2,
     onLeftBumper,
     onRightBumper,
-    onStart
+    onStart,
+    scrollRef,
+    scrollSpeed = 8
   } = options
 
   const { activeGamepadIndex, dpadRepeatDelay, dpadRepeatRate } = useInputStore()
 
   const repeatDelay = options.repeatDelay ?? dpadRepeatDelay
   const repeatRate = options.repeatRate ?? dpadRepeatRate
+
+  // Store callbacks in refs to avoid effect restarts when callbacks change identity
+  const callbacksRef = useRef({
+    onNavigate,
+    onConfirm,
+    onBack,
+    onOption1,
+    onOption2,
+    onLeftBumper,
+    onRightBumper,
+    onStart
+  })
+  
+  // Update refs on every render
+  callbacksRef.current = {
+    onNavigate,
+    onConfirm,
+    onBack,
+    onOption1,
+    onOption2,
+    onLeftBumper,
+    onRightBumper,
+    onStart
+  }
 
   // Track navigation state for repeat
   const navigationState = useRef<{
@@ -164,7 +192,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       } else if (currentDirection) {
         if (state.direction !== currentDirection) {
           // New direction - fire immediately
-          onNavigate?.(currentDirection)
+          callbacksRef.current.onNavigate?.(currentDirection)
           state.direction = currentDirection
           state.timestamp = now
           state.lastRepeat = now
@@ -174,7 +202,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
           const timeSinceRepeat = now - state.lastRepeat
 
           if (timeSincePress > repeatDelay && timeSinceRepeat > repeatRate) {
-            onNavigate?.(currentDirection)
+            callbacksRef.current.onNavigate?.(currentDirection)
             state.lastRepeat = now
           }
         }
@@ -183,16 +211,17 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
         state.direction = null
       }
 
-      // Fire callbacks on justPressed (but not if we're still in needsRelease state)
-      if (!state.needsRelease) {
-        if (isJustPressed('confirm', confirmPressed)) onConfirm?.()
-        if (isJustPressed('back', backPressed)) onBack?.()
-        if (isJustPressed('option1', option1Pressed)) onOption1?.()
-        if (isJustPressed('option2', option2Pressed)) onOption2?.()
-        if (isJustPressed('lb', lbPressed)) onLeftBumper?.()
-        if (isJustPressed('rb', rbPressed)) onRightBumper?.()
-        if (isJustPressed('start', startPressed)) onStart?.()
-      }
+      // Fire callbacks on justPressed
+      // Note: Action buttons are NOT gated by needsRelease - only directional input is.
+      // This ensures A/B/X/Y always work even if stick drift set needsRelease on first frame.
+      const cbs = callbacksRef.current
+      if (isJustPressed('confirm', confirmPressed)) cbs.onConfirm?.()
+      if (isJustPressed('back', backPressed)) cbs.onBack?.()
+      if (isJustPressed('option1', option1Pressed)) cbs.onOption1?.()
+      if (isJustPressed('option2', option2Pressed)) cbs.onOption2?.()
+      if (isJustPressed('lb', lbPressed)) cbs.onLeftBumper?.()
+      if (isJustPressed('rb', rbPressed)) cbs.onRightBumper?.()
+      if (isJustPressed('start', startPressed)) cbs.onStart?.()
 
       // Update previous states
       previousButtonStates.current.set('confirm', confirmPressed)
@@ -202,6 +231,15 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       previousButtonStates.current.set('lb', lbPressed)
       previousButtonStates.current.set('rb', rbPressed)
       previousButtonStates.current.set('start', startPressed)
+
+      // Handle right stick scrolling
+      if (scrollRef?.current) {
+        const rightStick = service.getRightStick(gamepadIndex)
+        const deadzone = 0.2
+        if (Math.abs(rightStick.y) > deadzone) {
+          scrollRef.current.scrollTop += rightStick.y * scrollSpeed
+        }
+      }
 
       animationFrameId = requestAnimationFrame(poll)
     }
@@ -214,18 +252,11 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
   }, [
     enabled,
     activeGamepadIndex,
-    onNavigate,
-    onConfirm,
-    onBack,
-    onOption1,
-    onOption2,
-    onLeftBumper,
-    onRightBumper,
-    onStart,
     repeatDelay,
     repeatRate,
     checkStickDirection,
     isJustPressed
+    // Note: callbacks are accessed via callbacksRef to avoid effect restarts
   ])
 }
 

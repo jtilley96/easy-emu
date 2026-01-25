@@ -20,9 +20,26 @@ export default function Library() {
   const [focusedIndex, setFocusedIndex] = useState(0)
   const [isHeaderFocused, setIsHeaderFocused] = useState(false)
   
+  // Prevent A button from firing immediately after navigation or focus change
+  const justActivatedRef = useRef(true)
+  
   useEffect(() => {
     loadLibrary()
   }, [loadLibrary])
+  
+  // Reset activation guard when focus changes to/from sidebar
+  useEffect(() => {
+    if (isSidebarFocused) {
+      // Page lost focus - set guard for when it regains focus
+      justActivatedRef.current = true
+    } else {
+      // Page gained focus - clear guard after short delay
+      const timeout = setTimeout(() => {
+        justActivatedRef.current = false
+      }, 200)
+      return () => clearTimeout(timeout)
+    }
+  }, [isSidebarFocused])
   const [searchParams] = useSearchParams()
   const quickFilter = searchParams.get('filter') as QuickFilter
   const [searchQuery, setSearchQuery] = useState('')
@@ -214,6 +231,8 @@ export default function Library() {
   }, [isSidebarFocused, isHeaderFocused, focusedIndex, filteredGames.length, libraryViewMode, getColumns, setIsSidebarFocused])
 
   const handleConfirm = useCallback(() => {
+    // Ignore if we just activated (prevents double-activation from held A button)
+    if (justActivatedRef.current) return
     if (isSidebarFocused) return
     if (isHeaderFocused) {
       // Header controls are focused - could focus search bar or do nothing
