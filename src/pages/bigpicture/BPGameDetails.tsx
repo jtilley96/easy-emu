@@ -36,8 +36,8 @@ export default function BPGameDetails() {
     try {
       const result = await startGame(game.id)
       if (result.success) {
-        // Navigate to emulator view
-        navigate(`/play/${game.id}`)
+        // Navigate to emulator view (state used on exit to return to big picture)
+        navigate(`/play/${game.id}`, { state: { from: 'bigpicture' } })
       } else {
         addToast('error', result.error || 'Failed to start game')
         setIsLaunching(false)

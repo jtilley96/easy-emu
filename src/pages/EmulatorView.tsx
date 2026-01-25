@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import EmulatorCanvas, { EmulatorCanvasRef } from '../components/emulator/EmulatorCanvas'
 import EmulatorHUD from '../components/emulator/EmulatorHUD'
@@ -13,6 +13,7 @@ import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 export default function EmulatorView() {
   const { gameId } = useParams<{ gameId: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const { games } = useLibraryStore()
   const { startGame, stopGame, saveState, loadState } = useEmulatorStore()
@@ -168,7 +169,11 @@ export default function EmulatorView() {
     // Calculate play time and navigate back
     const playTime = Date.now() - sessionStartTime
     await stopGame(playTime)
-    navigate(`/game/${gameId}`)
+
+    // Replace history so "Back" from game details doesn't return to /play/ (avoids stuck loading)
+    const fromBigPicture = (location.state as { from?: string } | null)?.from === 'bigpicture'
+    const returnPath = fromBigPicture ? `/bigpicture/game/${gameId}` : `/game/${gameId}`
+    navigate(returnPath, { replace: true })
   }
 
   const togglePause = () => {
@@ -280,13 +285,16 @@ export default function EmulatorView() {
 
   // Error state
   if (error) {
+    const fromBigPicture = (location.state as { from?: string } | null)?.from === 'bigpicture'
+    const returnPath = fromBigPicture ? `/bigpicture/game/${gameId}` : `/game/${gameId}`
+
     return (
       <div className="h-screen w-screen bg-surface-950 flex items-center justify-center">
         <div className="text-center max-w-md">
           <h2 className="text-xl font-semibold mb-4 text-red-400">Failed to Start Game</h2>
           <p className="text-surface-400 mb-6">{error}</p>
           <button
-            onClick={() => navigate(`/game/${gameId}`)}
+            onClick={() => navigate(returnPath, { replace: true })}
             className="px-6 py-2 bg-accent hover:bg-accent-hover rounded-lg font-medium"
           >
             Return to Game Details
