@@ -36,6 +36,9 @@ pids
 cores/
 data/
 
+# Obsolete: platform logos moved to src/assets/systems (data URLs)
+public/systems/
+
 # TypeScript cache
 *.tsbuildinfo
 

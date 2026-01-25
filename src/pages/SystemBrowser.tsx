@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useLibraryStore } from '../store/libraryStore'
 import { PLATFORMS } from '../constants/platforms'
+import { getPlatformImageUrl } from '../constants/platformImages'
 import GameCard from '../components/GameCard'
 
 export default function SystemBrowser() {
@@ -28,10 +29,20 @@ export default function SystemBrowser() {
             ← All Systems
           </Link>
           <h1 className="text-2xl font-bold flex items-center gap-3">
-            {platformInfo?.icon && (
-              <span className="text-3xl">{platformInfo.icon}</span>
-            )}
-            {platformInfo?.name || platform}
+            {platform && (() => {
+              const imgUrl = getPlatformImageUrl(platform)
+              return imgUrl ? (
+                <img
+                  src={imgUrl}
+                  alt={platformInfo?.name ?? platform}
+                  className="h-8 w-auto object-contain"
+                />
+              ) : platformInfo?.icon ? (
+                <span className="text-3xl" aria-label={platformInfo?.name ?? platform}>
+                  {platformInfo.icon}
+                </span>
+              ) : null
+            })()}
           </h1>
           <p className="text-surface-400">{platformGames.length} games</p>
         </div>
@@ -65,14 +76,20 @@ export default function SystemBrowser() {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {PLATFORMS.map(platform => {
             const count = gamesByPlatform[platform.id]?.length || 0
+            const imgUrl = getPlatformImageUrl(platform.id)
             return (
               <Link
                 key={platform.id}
                 to={`/systems/${platform.id}`}
-                className="bg-surface-800 hover:bg-surface-700 rounded-lg p-6 text-center transition-colors"
+                className="bg-surface-800 hover:bg-surface-700 rounded-lg p-6 text-center transition-colors flex flex-col items-center"
               >
-                <div className="text-4xl mb-3">{platform.icon}</div>
-                <h3 className="font-semibold mb-1">{platform.name}</h3>
+                <div className="mb-3 flex items-center justify-center">
+                  {imgUrl ? (
+                    <img src={imgUrl} alt={platform.name} className="h-8 w-auto object-contain" />
+                  ) : (
+                    <span className="text-4xl" aria-label={platform.name}>{platform.icon}</span>
+                  )}
+                </div>
                 <p className="text-surface-400 text-sm">
                   {count} {count === 1 ? 'game' : 'games'}
                 </p>

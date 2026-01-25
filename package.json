@@ -1,6 +1,6 @@
 {
   "name": "easyemu",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A unified interface for playing emulated games across all gaming systems",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -16,7 +16,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "download-platform-images": "node scripts/download-platform-images.mjs"
   },
   "dependencies": {
     "electron-store": "^8.1.0",

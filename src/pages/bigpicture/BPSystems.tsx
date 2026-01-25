@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { useLibraryStore } from '../../store/libraryStore'
 import { PLATFORMS } from '../../constants/platforms'
+import { getPlatformImageUrl } from '../../constants/platformImages'
 import { Game } from '../../types'
 import { BPLayoutContext } from '../../components/bigpicture/BPLayout'
 import { useGamepadNavigation } from '../../hooks/useGamepadNavigation'
@@ -112,28 +113,35 @@ export default function BPSystems() {
       {/* Platform List */}
       <div className="w-80 bg-surface-900/50 border-r border-surface-800 overflow-auto">
         <div className="p-4 space-y-2">
-          {platformsWithGames.map((platform, index) => (
-            <button
-              key={platform.id}
-              onClick={() => {
-                setSelectedPlatformIndex(index)
-                setIsPlatformListFocused(true)
-              }}
-              className={`w-full flex items-center justify-between p-4 rounded-xl text-left transition-all ${
-                selectedPlatformIndex === index && isPlatformListFocused
-                  ? 'bg-accent scale-105 shadow-lg bp-focus'
-                  : selectedPlatformIndex === index
-                  ? 'bg-surface-700'
-                  : 'hover:bg-surface-800'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{platform.icon}</span>
-                <span className="font-medium">{platform.shortName}</span>
-              </div>
-              <span className="text-surface-400">{platform.gameCount}</span>
-            </button>
-          ))}
+          {platformsWithGames.map((platform, index) => {
+            const imgUrl = getPlatformImageUrl(platform.id)
+            return (
+              <button
+                key={platform.id}
+                onClick={() => {
+                  setSelectedPlatformIndex(index)
+                  setIsPlatformListFocused(true)
+                }}
+                className={`w-full flex items-center justify-between p-4 rounded-xl text-left transition-all ${
+                  selectedPlatformIndex === index && isPlatformListFocused
+                    ? 'bg-accent scale-105 shadow-lg bp-focus'
+                    : selectedPlatformIndex === index
+                    ? 'bg-surface-700'
+                    : 'hover:bg-surface-800'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  {imgUrl ? (
+                    <img src={imgUrl} alt="" className="h-7 w-auto object-contain" aria-hidden />
+                  ) : (
+                    <span className="text-2xl">{platform.icon}</span>
+                  )}
+                  <span className="font-medium">{platform.shortName}</span>
+                </div>
+                <span className="text-surface-400">{platform.gameCount}</span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -143,8 +151,18 @@ export default function BPSystems() {
           <div className="h-full flex flex-col">
             <div className="flex-shrink-0 px-8 py-4 bg-surface-900/50 border-b border-surface-800">
               <h2 className="text-2xl font-bold flex items-center gap-3">
-                <span>{selectedPlatform.icon}</span>
-                {selectedPlatform.name}
+                {(() => {
+                  const imgUrl = getPlatformImageUrl(selectedPlatform.id)
+                  return imgUrl ? (
+                    <img
+                      src={imgUrl}
+                      alt={selectedPlatform.name}
+                      className="h-8 w-auto object-contain"
+                    />
+                  ) : (
+                    <span aria-label={selectedPlatform.name}>{selectedPlatform.icon}</span>
+                  )
+                })()}
                 <span className="text-surface-400 text-lg font-normal">
                   ({platformGames.length} games)
                 </span>

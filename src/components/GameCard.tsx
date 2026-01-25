@@ -7,6 +7,8 @@ import { pathToLocalImageUrl } from '../utils/image'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import { useEmulatorStore } from '../store/emulatorStore'
+import { getPlatformImageUrl } from '../constants/platformImages'
+import { getPlatformById } from '../constants/platforms'
 
 interface GameCardProps {
   game: Game
@@ -63,6 +65,11 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
     await toggleFavorite(game.id)
   }
 
+  const playTimeLabel = formatPlayTime(game.playTime)
+  const playTimeDisplay = playTimeLabel === 'Not played' ? playTimeLabel : `${playTimeLabel} played`
+  const platformImgUrl = getPlatformImageUrl(game.platform)
+  const platformName = getPlatformById(game.platform)?.name ?? game.platform
+
   if (variant === 'list') {
     return (
       <Link
@@ -92,12 +99,10 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
 
         {/* Stats */}
         <div className="flex items-center gap-6 text-sm text-surface-400">
-          {game.playTime && game.playTime > 0 && (
-            <span className="flex items-center gap-1">
-              <Clock size={14} />
-              {formatPlayTime(game.playTime)}
-            </span>
-          )}
+          <span className="flex items-center gap-1">
+            <Clock size={14} />
+            {playTimeLabel}
+          </span>
           {game.rating && (
             <span className="flex items-center gap-1">
               <Star size={14} className="text-yellow-500" />
@@ -169,10 +174,17 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
           </button>
         </div>
 
-        {/* Platform badge */}
-        <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/70 rounded text-xs font-medium">
-          {game.platform}
-        </span>
+        {/* Platform badge — dark backdrop so logo stays visible on light covers */}
+        <div
+          className="absolute top-2 left-2 flex items-center justify-center px-2 py-1 rounded bg-black/70 min-w-[2rem] min-h-[1.5rem]"
+          title={platformName}
+        >
+          {platformImgUrl ? (
+            <img src={platformImgUrl} alt={platformName} className="h-5 w-auto max-w-[3rem] object-contain" />
+          ) : (
+            <span className="text-xs font-medium text-white">{game.platform}</span>
+          )}
+        </div>
 
         {/* Favorite button */}
         <button
@@ -196,11 +208,9 @@ export default function GameCard({ game, variant = 'grid' }: GameCardProps) {
         <h3 className="font-semibold text-sm truncate" title={game.title}>
           {game.title}
         </h3>
-        {game.playTime && game.playTime > 0 && (
-          <p className="text-xs text-surface-400 mt-1">
-            {formatPlayTime(game.playTime)} played
-          </p>
-        )}
+        <p className="text-xs text-surface-400 mt-1">
+          {playTimeDisplay}
+        </p>
       </div>
     </Link>
   )

@@ -348,7 +348,7 @@ export default function GameDetails() {
             <div className="flex gap-6 mb-6 text-sm">
               <div className="flex items-center gap-2 text-surface-400">
                 <Clock size={16} />
-                <span>Play time: {formatPlayTime(game.playTime || 0)}</span>
+                <span>Play time: {formatPlayTime(game.playTime)}</span>
               </div>
 
               {game.lastPlayed && (

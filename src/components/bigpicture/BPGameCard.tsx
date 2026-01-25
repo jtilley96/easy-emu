@@ -3,6 +3,8 @@ import { Star, Play } from 'lucide-react'
 import { Game } from '../../types'
 import { useInputStore } from '../../store/inputStore'
 import { pathToLocalImageUrl } from '../../utils/image'
+import { getPlatformImageUrl } from '../../constants/platformImages'
+import { getPlatformById } from '../../constants/platforms'
 
 interface BPGameCardProps {
   game: Game
@@ -104,11 +106,26 @@ const BPGameCard = forwardRef<HTMLButtonElement, BPGameCardProps>(
           <h3 className="font-semibold text-white truncate text-sm drop-shadow-lg">
             {game.title}
           </h3>
-          {game.platform && (
-            <p className="text-xs text-surface-300 truncate drop-shadow">
-              {game.platform}
-            </p>
-          )}
+          {game.platform && (() => {
+            const imgUrl = getPlatformImageUrl(game.platform)
+            const platformName = getPlatformById(game.platform)?.name ?? game.platform
+            return (
+              <div className="mt-1 flex items-center gap-1.5">
+                {imgUrl ? (
+                  <span
+                    className="inline-flex items-center justify-center px-1.5 py-0.5 rounded bg-black/70"
+                    title={platformName}
+                  >
+                    <img src={imgUrl} alt={platformName} className="h-4 w-auto max-w-[2.5rem] object-contain" />
+                  </span>
+                ) : (
+                  <p className="text-xs text-surface-300 truncate drop-shadow">
+                    {game.platform}
+                  </p>
+                )}
+              </div>
+            )
+          })()}
         </div>
       </button>
     )

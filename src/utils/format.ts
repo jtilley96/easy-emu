@@ -1,7 +1,12 @@
 /**
- * Format play time from minutes to human readable string
+ * Format play time from minutes to human readable string.
+ * Returns "Not played" when minutes is 0, undefined, or missing.
  */
-export function formatPlayTime(minutes: number): string {
+export function formatPlayTime(minutes?: number): string {
+  if (minutes == null || minutes <= 0) {
+    return 'Not played'
+  }
+
   if (minutes < 1) {
     return 'Less than a minute'
   }
