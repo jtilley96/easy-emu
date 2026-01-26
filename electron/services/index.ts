@@ -8,6 +8,7 @@ import { registerHasheousHandlers, setHasheousMainWindow } from './hasheous'
 import { registerCoreHandlers, setCoresMainWindow } from './cores'
 import { registerSaveHandlers } from './saveManager'
 import { registerEmbeddedHandlers, setEmbeddedMainWindow } from './embeddedEmulator'
+import { registerUpdaterHandlers, setUpdaterMainWindow } from './updater'
 
 export function initializeServices(mainWindow?: BrowserWindow | null): void {
   // Load configuration first
@@ -26,12 +27,14 @@ export function initializeServices(mainWindow?: BrowserWindow | null): void {
   registerCoreHandlers()
   registerSaveHandlers()
   registerEmbeddedHandlers()
+  registerUpdaterHandlers()
 
   // Set main window references for services that need to send events
   setEmulatorMainWindow(mainWindow ?? null)
   setHasheousMainWindow(mainWindow ?? null)
   setCoresMainWindow(mainWindow ?? null)
   setEmbeddedMainWindow(mainWindow ?? null)
+  setUpdaterMainWindow(mainWindow ?? null)
 }
 
 export { loadConfig, getConfigValue, setConfigValue } from './config'
@@ -40,3 +43,4 @@ export { detectAllEmulators, launchGame } from './emulators'
 export { getInstalledCores, getAvailableCores, downloadCore, deleteCore } from './cores'
 export { loadSRAM, saveSRAM, saveState, loadState, listStates } from './saveManager'
 export { checkCanPlayEmbedded, startSession, endSession } from './embeddedEmulator'
+export { checkForUpdates } from './updater'
