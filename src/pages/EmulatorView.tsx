@@ -336,16 +336,17 @@ export default function EmulatorView() {
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // When a gamepad is connected, Steam Input may send keyboard events for controller buttons
-      // Skip these to prevent double-input (e.g., B button sending Escape, A button sending Enter)
-      const hasGamepad = getGamepadService().getGamepads().length > 0
+      // On Linux (Steam Deck), Steam Input sends keyboard events for controller buttons
+      // Block these keys so they pass through to the emulator instead of triggering app actions
+      // We check platform instead of gamepad count because EmulatorJS interferes with gamepad detection
+      const isLinux = navigator.platform.toLowerCase().includes('linux')
       const isSteamInputKey = ['Escape', 'Enter', ' ', 'Backspace'].includes(e.key)
 
-      console.log('[Emulator] Key:', e.key, 'Gamepads:', getGamepadService().getGamepads().length, 'Block:', hasGamepad && isSteamInputKey)
+      console.log('[Emulator] Key:', e.key, 'Platform:', navigator.platform, 'Block:', isLinux && isSteamInputKey)
 
-      if (hasGamepad && isSteamInputKey) {
+      if (isLinux && isSteamInputKey) {
         // Don't intercept these keys - let them pass through to the emulator
-        // The gamepad polling will handle the actual controller input
+        // EmulatorJS handles the actual game input
         return
       }
 

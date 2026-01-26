@@ -151,6 +151,7 @@ export default function Library() {
 
   // Handle gamepad navigation
   const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    console.log('[Library] handleNavigate:', direction, 'focusedIndex:', focusedIndex)
     if (isSidebarFocused || keyboardOpen) return
 
     // If a dropdown is open, navigate within it
@@ -275,6 +276,7 @@ export default function Library() {
     })()
 
     // Update state separately to avoid render warnings
+    console.log('[Library] newIndex:', newIndex, 'shouldMoveToSidebar:', shouldMoveToSidebar, 'columns:', libraryViewMode === 'grid' ? getColumns() : 1)
     if (shouldMoveToSidebar) {
       setIsSidebarFocused(true)
     } else {
