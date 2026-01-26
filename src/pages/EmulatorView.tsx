@@ -9,7 +9,29 @@ import { useEmulatorStore } from '../store/emulatorStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
+import { getGamepadService } from '../services/gamepadService'
 import type { EmulatorHotkeyAction } from '../types'
+
+/**
+ * Dispatch a synthetic keyboard event to EmulatorJS
+ * This is used to translate Steam Input keyboard events to EmulatorJS expected keys
+ */
+function dispatchKeyToEmulator(key: string, type: 'keydown' | 'keyup' = 'keydown'): void {
+  const event = new KeyboardEvent(type, {
+    key,
+    code: `Key${key.toUpperCase()}`,
+    keyCode: key.charCodeAt(0),
+    which: key.charCodeAt(0),
+    bubbles: true,
+    cancelable: true
+  })
+  // Dispatch to the EmulatorJS player element if it exists, otherwise document
+  const ejsPlayer = document.getElementById('ejs-player')
+  if (ejsPlayer) {
+    ejsPlayer.dispatchEvent(event)
+  }
+  document.dispatchEvent(event)
+}
 
 export default function EmulatorView() {
   const { gameId } = useParams<{ gameId: string }>()
@@ -332,24 +354,83 @@ export default function EmulatorView() {
     }
   }, [addToast, handleScreenshot, openSaveModal, openLoadModal, togglePause, toggleFullscreen])
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts and Steam Input translation
+  // Steam Input on Steam Deck sends: Arrow keys for D-pad, Enter for A, Escape for B
+  // EmulatorJS expects: Arrow keys for D-pad, 'x' for A, 'z' for B
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Log all key events for debugging (throttled)
-      console.log('[EmulatorView] Key:', e.key)
+      // Check if a gamepad is connected
+      const service = getGamepadService()
+      const hasGamepad = service.getGamepads().length > 0
 
-      // Handle Escape to exit - always enabled as emergency exit
-      // This is critical on Steam Deck where gamepad input may not reach EmulatorJS
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        handleExit()
-        return
+      console.log('[EmulatorView] Key:', e.key, 'Gamepad:', hasGamepad ? 'yes' : 'no')
+
+      // Steam Input keyboard translation (only when no gamepad is detected)
+      // This allows Steam Deck users to play when Steam Input is in keyboard mode
+      if (!hasGamepad) {
+        // Enter (Steam A button) → 'x' (EmulatorJS A button)
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('x', 'keydown')
+          console.log('[EmulatorView] Translated Enter → x (A button)')
+          return
+        }
+
+        // Escape (Steam B button) → 'z' (EmulatorJS B button)
+        // Note: When no gamepad, Escape is used for B button, not exit
+        // Use Backspace or P+menu to exit instead
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('z', 'keydown')
+          console.log('[EmulatorView] Translated Escape → z (B button)')
+          return
+        }
+
+        // Space (Steam Start button?) → Enter (EmulatorJS Start)
+        // Since Enter is now used for A button, Space becomes Start
+        if (e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('Enter', 'keydown')
+          console.log('[EmulatorView] Translated Space → Enter (Start button)')
+          return
+        }
+
+        // Tab (Steam Select button?) → Shift (EmulatorJS Select)
+        if (e.key === 'Tab') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('Shift', 'keydown')
+          console.log('[EmulatorView] Translated Tab → Shift (Select button)')
+          return
+        }
+
+        // Backspace → exit game (since Escape is used for B button)
+        if (e.key === 'Backspace') {
+          e.preventDefault()
+          handleExit()
+          return
+        }
+      } else {
+        // When gamepad is connected, Escape exits (normal behavior)
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          handleExit()
+          return
+        }
       }
 
-      // Handle P for pause (legacy shortcut)
+      // Handle P for pause/menu (works regardless of gamepad)
       if (e.key === 'p' || e.key === 'P') {
         e.preventDefault()
-        togglePause()
+        // Open menu instead of just pausing - provides a way to exit
+        if (!menuModalOpen && !saveModalOpen) {
+          setMenuModalOpen(true)
+          emulatorRef.current?.pause()
+          setIsPaused(true)
+        }
         return
       }
 
@@ -367,9 +448,46 @@ export default function EmulatorView() {
       }
     }
 
+    // Also handle keyup for proper key release translation
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const service = getGamepadService()
+      const hasGamepad = service.getGamepads().length > 0
+
+      if (!hasGamepad) {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('x', 'keyup')
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('z', 'keyup')
+          return
+        }
+        if (e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('Enter', 'keyup')
+          return
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault()
+          e.stopPropagation()
+          dispatchKeyToEmulator('Shift', 'keyup')
+          return
+        }
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isPaused, emulatorHotkeys, executeHotkeyAction, handleExit, togglePause])
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [isPaused, emulatorHotkeys, executeHotkeyAction, handleExit, menuModalOpen, saveModalOpen])
 
   // Error state
   if (error) {
