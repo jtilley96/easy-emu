@@ -130,10 +130,11 @@ export default function Library() {
     setHeaderFocusIndex(-1)
   }, [filteredGames.length])
 
-  // Calculate columns based on viewport width
+  // Calculate columns based on viewport width (must match Tailwind breakpoints)
   const getColumns = useCallback(() => {
-    if (!gridRef.current) return 6 // default
-    const width = gridRef.current.offsetWidth
+    // Use window.innerWidth to match Tailwind's viewport-based breakpoints
+    // (NOT container width, which would be smaller due to sidebar)
+    const width = window.innerWidth
     // Match Tailwind breakpoints: 2, 3, 4, 5, 6, 8
     if (width >= 1536) return 8 // 2xl
     if (width >= 1280) return 6 // xl

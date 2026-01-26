@@ -335,18 +335,42 @@ export default function EmulatorView() {
 
   // Handle keyboard shortcuts
   useEffect(() => {
+    // On Linux (Steam Deck), Steam Input sends keyboard events for controller buttons
+    // Map Steam Input keys to EmulatorJS expected keys:
+    // - Enter (A button) → 'x' (EmulatorJS A button)
+    // - Escape (B button) → 'z' (EmulatorJS B button)
+    // - Space → 'x' (alternate A)
+    // - Backspace → 'z' (alternate B)
+    const steamInputKeyMap: Record<string, string> = {
+      'Enter': 'x',
+      'Escape': 'z',
+      ' ': 'x',
+      'Backspace': 'z'
+    }
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // On Linux (Steam Deck), Steam Input sends keyboard events for controller buttons
-      // Block these keys so they pass through to the emulator instead of triggering app actions
-      // We check platform instead of gamepad count because EmulatorJS interferes with gamepad detection
+      // Skip synthetic events we created (marked with custom property)
+      if ((e as any).__steamTranslated) return
+
       const isLinux = navigator.platform.toLowerCase().includes('linux')
-      const isSteamInputKey = ['Escape', 'Enter', ' ', 'Backspace'].includes(e.key)
 
-      console.log('[Emulator] Key:', e.key, 'Platform:', navigator.platform, 'Block:', isLinux && isSteamInputKey)
+      // On Linux, translate Steam Input keys to EmulatorJS game input keys
+      if (isLinux && e.key in steamInputKeyMap) {
+        const translatedKey = steamInputKeyMap[e.key]
+        console.log('[Emulator] Translating', e.key, '→', translatedKey)
 
-      if (isLinux && isSteamInputKey) {
-        // Don't intercept these keys - let them pass through to the emulator
-        // EmulatorJS handles the actual game input
+        e.preventDefault()
+        e.stopPropagation()
+
+        // Dispatch translated key event for EmulatorJS
+        const syntheticEvent = new KeyboardEvent('keydown', {
+          key: translatedKey,
+          code: `Key${translatedKey.toUpperCase()}`,
+          bubbles: true,
+          cancelable: true
+        })
+        ;(syntheticEvent as any).__steamTranslated = true
+        document.dispatchEvent(syntheticEvent)
         return
       }
 
@@ -378,8 +402,35 @@ export default function EmulatorView() {
       }
     }
 
+    // Also handle keyup for Steam Input key translation (so keys are properly released)
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if ((e as any).__steamTranslated) return
+
+      const isLinux = navigator.platform.toLowerCase().includes('linux')
+
+      if (isLinux && e.key in steamInputKeyMap) {
+        const translatedKey = steamInputKeyMap[e.key]
+
+        e.preventDefault()
+        e.stopPropagation()
+
+        const syntheticEvent = new KeyboardEvent('keyup', {
+          key: translatedKey,
+          code: `Key${translatedKey.toUpperCase()}`,
+          bubbles: true,
+          cancelable: true
+        })
+        ;(syntheticEvent as any).__steamTranslated = true
+        document.dispatchEvent(syntheticEvent)
+      }
+    }
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
   }, [isPaused, emulatorHotkeys, executeHotkeyAction, handleExit, togglePause])
 
   // Error state
