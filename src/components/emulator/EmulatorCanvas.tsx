@@ -546,6 +546,19 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         // Filter console logs before loading EmulatorJS
         setupConsoleFilter()
 
+        // Check CDN connectivity first
+        console.log('[Emulator] Checking CDN connectivity...')
+        try {
+          const cdnCheck = await fetch(`${EMULATORJS_CDN}/data/loader.js`, { method: 'HEAD' })
+          if (!cdnCheck.ok) {
+            throw new Error(`CDN returned status ${cdnCheck.status}`)
+          }
+          console.log('[Emulator] CDN is accessible')
+        } catch (cdnError) {
+          console.error('[Emulator] CDN connectivity check failed:', cdnError)
+          throw new Error('Cannot connect to EmulatorJS CDN. Check your internet connection.')
+        }
+
         // Remove any existing loader script so we can re-initialize EmulatorJS
         // This is necessary because EmulatorJS only auto-initializes on script load
         const existingScript = document.getElementById('emulatorjs-loader')
@@ -921,16 +934,19 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
 
     // Initialize on mount
     useEffect(() => {
+      console.log('[Emulator] EmulatorCanvas mounted, gameId:', gameId)
       mountedRef.current = true
 
       // Small delay to let React Strict Mode's first unmount happen
       const timer = setTimeout(() => {
+        console.log('[Emulator] Timer fired, mountedRef:', mountedRef.current)
         if (mountedRef.current) {
           initializeEmulator()
         }
       }, 100)
 
       return () => {
+        console.log('[Emulator] EmulatorCanvas unmounting')
         clearTimeout(timer)
         cleanupEmulator()
       }
