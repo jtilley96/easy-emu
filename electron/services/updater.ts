@@ -12,7 +12,7 @@ export function setUpdaterMainWindow(win: BrowserWindow | null): void {
 // GitHub repository configuration
 const GITHUB_OWNER = 'jtilley96'
 const GITHUB_REPO = 'easy-emu'
-const RELEASES_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
+const RELEASES_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases`
 
 export interface UpdateInfo {
   currentVersion: string
@@ -258,7 +258,31 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
   })
 
   try {
-    const release = await fetchJSON<GitHubRelease>(RELEASES_API)
+    const releases = await fetchJSON<GitHubRelease[]>(RELEASES_API)
+
+    // No releases found
+    if (!releases || releases.length === 0) {
+      sendProgress({
+        status: 'idle',
+        progress: 0,
+        downloadedBytes: 0,
+        totalBytes: 0
+      })
+      return {
+        currentVersion,
+        latestVersion: currentVersion,
+        hasUpdate: false,
+        releaseNotes: '',
+        releaseUrl: '',
+        downloadUrl: '',
+        publishedAt: '',
+        assetName: '',
+        assetSize: 0
+      }
+    }
+
+    // Get the latest release (first in the array)
+    const release = releases[0]
     const latestVersion = release.tag_name.replace(/^v/, '')
     const hasUpdate = compareVersions(latestVersion, currentVersion) > 0
 
