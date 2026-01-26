@@ -73,29 +73,17 @@ export default function GameDetails() {
   // This ensures the gamepad hook is enabled (enabled: !isSidebarFocused)
   useEffect(() => {
     setIsSidebarFocused(false)
-    
+
     // Clear navigation guard after short delay to prevent A button from firing immediately
     const timeout = setTimeout(() => {
       justNavigatedRef.current = false
     }, 200)
-    
+
     return () => clearTimeout(timeout)
   }, [setIsSidebarFocused])
 
-  if (!game) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <h2 className="text-xl font-semibold mb-2">Game not found</h2>
-        <button
-          onClick={() => navigate('/')}
-          className="text-accent hover:underline"
-        >
-          Return to Library
-        </button>
-      </div>
-    )
-  }
-
+  // All handler functions need to be defined before useGamepadNavigation hook
+  // to avoid hooks being called conditionally (after early return)
   const handlePlay = async () => {
     if (!game) return
     setShowPlayMenu(false)
@@ -137,6 +125,7 @@ export default function GameDetails() {
   }
 
   const handleToggleFavorite = async () => {
+    if (!game) return
     await toggleFavorite(game.id)
     addToast('success', game.isFavorite ? 'Removed from favorites' : 'Added to favorites')
   }
@@ -163,6 +152,7 @@ export default function GameDetails() {
   }
 
   const handleDelete = async () => {
+    if (!game) return
     setIsDeleting(true)
     try {
       await deleteGame(game.id)
@@ -311,6 +301,15 @@ export default function GameDetails() {
     onConfirm: handleConfirm,
     onBack: handleBack
   })
+
+  // Early return if game not found - must be AFTER all hooks to satisfy React's rules
+  if (!game) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-surface-400">Game not found</p>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full overflow-auto">

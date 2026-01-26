@@ -17,7 +17,7 @@ interface LibraryState {
   refreshPlatformsWithEmulator: () => Promise<void>
   addRomFolder: (path: string) => void
   removeRomFolder: (path: string) => void
-  scanLibrary: () => Promise<void>
+  scanLibrary: () => Promise<{ added: number; removed: number } | null>
   launchGame: (gameId: string, emulatorId?: string) => Promise<void>
   updateGame: (gameId: string, data: Partial<Game>) => Promise<void>
   toggleFavorite: (gameId: string) => Promise<void>
@@ -86,18 +86,21 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   scanLibrary: async () => {
     const { romFolders } = get()
-    if (romFolders.length === 0) return
+    if (romFolders.length === 0) return null
 
     set({ isScanning: true, scanProgress: null })
 
     try {
-      await window.electronAPI.library.scan(romFolders)
+      const result = await window.electronAPI.library.scan(romFolders)
 
       // Reload games after scan
       const games = await window.electronAPI.library.getGames()
       set({ games })
+
+      return result
     } catch (error) {
       console.error('Failed to scan library:', error)
+      return null
     } finally {
       set({ isScanning: false, scanProgress: null })
     }

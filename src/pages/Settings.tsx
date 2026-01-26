@@ -315,8 +315,18 @@ function LibrarySettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
   }
 
   const handleScan = async () => {
-    await scanLibrary()
-    addToast('success', 'Library scan complete')
+    const result = await scanLibrary()
+    if (result) {
+      const parts: string[] = []
+      if (result.added > 0) parts.push(`${result.added} added`)
+      if (result.removed > 0) parts.push(`${result.removed} removed`)
+      const message = parts.length > 0
+        ? `Library scan complete: ${parts.join(', ')}`
+        : 'Library scan complete: no changes'
+      addToast('success', message)
+    } else {
+      addToast('info', 'No ROM folders configured')
+    }
   }
 
   const handleConfirm = useCallback(() => {
