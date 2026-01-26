@@ -115,10 +115,14 @@ export default function Settings() {
     }
   }, [currentSection])
 
-  // Reset content focus when section changes
+  // Reset content focus and scroll when section changes
   useEffect(() => {
     setFocusedRow(0)
     setFocusedCol(0)
+    // Scroll content to top
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }, [currentSection])
 
   // Auto-scroll to focused content item
@@ -144,42 +148,56 @@ export default function Settings() {
     }
   }, [focusedRow, focusedCol, isSectionListFocused])
 
+  // Helper to enter content area
+  const enterContentArea = useCallback(() => {
+    setIsSectionListFocused(false)
+    setFocusedRow(0)
+    setFocusedCol(0)
+  }, [])
+
   const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
     if (isSidebarFocused) return
 
     if (isSectionListFocused) {
-      // Navigate settings section tabs - only up/down
+      // Navigate settings section tabs
       if (direction === 'up') {
         if (focusedSectionIndex === 0) {
           // At top - return focus to main sidebar
           setIsSidebarFocused(true)
         } else {
-          setFocusedSectionIndex(prev => prev - 1)
+          // Move up and immediately show that section's content
+          const newIndex = focusedSectionIndex - 1
+          setFocusedSectionIndex(newIndex)
+          navigate(`/settings/${NAV_ITEMS[newIndex].id}`, { replace: true })
         }
       } else if (direction === 'down') {
-        setFocusedSectionIndex(prev => Math.min(NAV_ITEMS.length - 1, prev + 1))
+        if (focusedSectionIndex < NAV_ITEMS.length - 1) {
+          // Move down and immediately show that section's content
+          const newIndex = focusedSectionIndex + 1
+          setFocusedSectionIndex(newIndex)
+          navigate(`/settings/${NAV_ITEMS[newIndex].id}`, { replace: true })
+        }
       } else if (direction === 'left') {
         // Return focus to main sidebar
         setIsSidebarFocused(true)
+      } else if (direction === 'right') {
+        // Enter content area
+        enterContentArea()
       }
-      // Right does nothing in section list - must press A to enter
     }
     // Content area navigation is handled by each section
-  }, [isSidebarFocused, isSectionListFocused, focusedSectionIndex, setIsSidebarFocused])
+  }, [isSidebarFocused, isSectionListFocused, focusedSectionIndex, setIsSidebarFocused, navigate, enterContentArea])
 
   const handleConfirm = useCallback(() => {
     // Ignore if we just activated (prevents double-activation from held A button)
     if (justActivatedRef.current) return
     if (isSidebarFocused) return
     if (isSectionListFocused) {
-      // Select section and enter content area
-      navigate(`/settings/${NAV_ITEMS[focusedSectionIndex].id}`)
-      setIsSectionListFocused(false)
-      setFocusedRow(0)
-      setFocusedCol(0)
+      // Enter content area (section is already showing)
+      enterContentArea()
     }
     // Content area confirmation is handled by each section
-  }, [isSidebarFocused, isSectionListFocused, focusedSectionIndex, navigate])
+  }, [isSidebarFocused, isSectionListFocused, enterContentArea])
 
   const handleBack = useCallback(() => {
     if (isSidebarFocused) return
@@ -488,27 +506,28 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
   // Platform grid layout - 3 columns on large screens
   const PLATFORM_GRID_COLS = 3
   const platformCount = PLATFORMS.length
-  
+
   // Navigation layout (using row for section, col for position within section):
-  // Row 0: Re-detect button (col ignored)
-  // Row 1: Platform grid (col = platform index within grid)
-  // Row 2+: Emulator cards (col ignored, row-2 = emulator index)
-  const emulatorStartRow = 2
-  const itemCount = emulatorStartRow + emulators.length
-  
+  // Row 0: Platform grid (col = platform index within grid) - NES is first
+  // Row 1 to N: Emulator cards (col = button index within card)
+  // Row N+1: Re-detect button (at the end)
+  const emulatorStartRow = 1
+  const redetectRow = emulatorStartRow + emulators.length
+  const itemCount = redetectRow + 1
+
   useEffect(() => {
-    // Col count: row 0 = 1, row 1 = platformCount, row 2+ = 1 each
-    const cols = [1, platformCount, ...Array(emulators.length).fill(1)]
+    // Col count: row 0 = platformCount, row 1 to N = 1 each (emulators), last row = 1 (redetect)
+    const cols = [platformCount, ...Array(emulators.length).fill(1), 1]
     onGridChange({ rows: itemCount, cols })
   }, [itemCount, platformCount, emulators.length, onGridChange])
 
   // Get current section info
   const getCurrentSection = () => {
-    if (focusedRow === 0) return 'redetect'
-    if (focusedRow === 1) return 'platforms'
+    if (focusedRow === 0) return 'platforms'
+    if (focusedRow === redetectRow) return 'redetect'
     return 'emulators'
   }
-  
+
   const currentSection = getCurrentSection()
   const focusedPlatformIndex = currentSection === 'platforms' ? focusedCol : -1
   const focusedEmulatorIndex = currentSection === 'emulators' ? focusedRow - emulatorStartRow : -1
@@ -625,8 +644,8 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
     )
 
   // Helper to check if a section/item is focused
-  const isRedetectFocused = () => isFocused && focusedRow === 0 && !isDropdownOpen
-  const isPlatformFocused = (platformIndex: number) => isFocused && focusedRow === 1 && focusedCol === platformIndex && !isDropdownOpen
+  const isRedetectFocused = () => isFocused && focusedRow === redetectRow && !isDropdownOpen
+  const isPlatformFocused = (platformIndex: number) => isFocused && focusedRow === 0 && focusedCol === platformIndex && !isDropdownOpen
   const isEmulatorFocused = (emulatorIndex: number) => isFocused && focusedRow === emulatorStartRow + emulatorIndex && !isDropdownOpen
   const isEmulatorButtonFocused = (emulatorIndex: number, buttonIndex: number) => 
     isEmulatorFocused(emulatorIndex) && focusedCol === buttonIndex
@@ -743,30 +762,32 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
         return
       }
       
-      // Grid navigation for platforms section
+      // Grid navigation for platforms section (row 0)
       if (currentSection === 'platforms') {
         const currentGridRow = Math.floor(focusedCol / PLATFORM_GRID_COLS)
         const currentGridCol = focusedCol % PLATFORM_GRID_COLS
-        
+
         if (direction === 'up') {
           if (currentGridRow === 0) {
-            // Move to redetect button
-            onFocusChange(0, 0)
+            // At top of platforms - go back to section list
+            onBack()
           } else {
             // Move up one row in grid
             const newIndex = (currentGridRow - 1) * PLATFORM_GRID_COLS + currentGridCol
-            onFocusChange(1, Math.min(newIndex, platformCount - 1))
+            onFocusChange(0, Math.min(newIndex, platformCount - 1))
           }
         } else if (direction === 'down') {
           const newGridRow = currentGridRow + 1
           const newIndex = newGridRow * PLATFORM_GRID_COLS + currentGridCol
           if (newIndex < platformCount) {
             // Move down one row in grid
-            onFocusChange(1, newIndex)
+            onFocusChange(0, newIndex)
           } else {
-            // Move to emulators section
+            // Move to emulators section (or redetect if no emulators)
             if (emulators.length > 0) {
               onFocusChange(emulatorStartRow, 0)
+            } else {
+              onFocusChange(redetectRow, 0)
             }
           }
         } else if (direction === 'left') {
@@ -775,32 +796,33 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
             onBack()
           } else {
             // Move left in grid
-            onFocusChange(1, focusedCol - 1)
+            onFocusChange(0, focusedCol - 1)
           }
         } else if (direction === 'right') {
           if (focusedCol < platformCount - 1) {
             // Move right in grid
-            onFocusChange(1, focusedCol + 1)
+            onFocusChange(0, focusedCol + 1)
           }
         }
         return
       }
-      
+
       // Emulator section navigation (with left/right for buttons)
       if (currentSection === 'emulators' && focusedEmulator) {
         const buttons = getEmulatorButtons(focusedEmulator)
         const maxCol = buttons.length - 1
-        
+
         if (direction === 'up') {
           if (focusedRow === emulatorStartRow) {
             // From first emulator, go to last row of platform grid
             const lastPlatformIndex = platformCount - 1
-            onFocusChange(1, lastPlatformIndex)
+            onFocusChange(0, lastPlatformIndex)
           } else {
             onFocusChange(focusedRow - 1, 0)
           }
         } else if (direction === 'down') {
-          if (focusedRow < itemCount - 1) {
+          if (focusedRow < redetectRow) {
+            // Move to next emulator or redetect button
             onFocusChange(focusedRow + 1, 0)
           }
         } else if (direction === 'left') {
@@ -816,19 +838,20 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
         }
         return
       }
-      
-      // Normal linear navigation for redetect
-      if (direction === 'up') {
-        if (focusedRow === 0) {
+
+      // Navigation for redetect button (now at the end)
+      if (currentSection === 'redetect') {
+        if (direction === 'up') {
+          // Go to last emulator, or last platform if no emulators
+          if (emulators.length > 0) {
+            onFocusChange(redetectRow - 1, 0)
+          } else {
+            onFocusChange(0, platformCount - 1)
+          }
+        } else if (direction === 'left') {
           onBack()
         }
-      } else if (direction === 'down') {
-        if (focusedRow === 0) {
-          // From redetect, go to first platform
-          onFocusChange(1, 0)
-        }
-      } else if (direction === 'left') {
-        onBack()
+        // Down does nothing - we're at the bottom
       }
     },
     onConfirm: handleConfirm,
@@ -838,26 +861,8 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6">
         <h2 className="text-2xl font-bold">Emulator Settings</h2>
-        <button
-          data-focus-row={0}
-          data-focus-col={0}
-          onClick={async () => {
-            await loadEmulators()
-            loadConfig()
-            await refreshPlatformsWithEmulator()
-          }}
-          disabled={loading}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-all ${
-            isRedetectFocused()
-              ? 'bg-accent text-white ring-2 ring-accent scale-105'
-              : 'bg-surface-700 hover:bg-surface-600'
-          }`}
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          Re-detect All
-        </button>
       </div>
 
       {/* Default emulator per platform */}
@@ -875,9 +880,9 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
             const displayValue = currentEmulator?.name ?? 'Default (first installed)'
             
             return (
-              <div 
-                key={p.id} 
-                data-focus-row={1}
+              <div
+                key={p.id}
+                data-focus-row={0}
                 data-focus-col={index}
                 className={`bg-surface-800 rounded-lg px-4 py-3 transition-all relative ${
                   isThisPlatformFocused || isThisDropdownOpen ? 'ring-2 ring-accent' : ''
@@ -1047,6 +1052,28 @@ function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, o
             })}
           </div>
         )}
+      </section>
+
+      {/* Re-detect button at the end */}
+      <section className="mt-6">
+        <button
+          data-focus-row={redetectRow}
+          data-focus-col={0}
+          onClick={async () => {
+            await loadEmulators()
+            loadConfig()
+            await refreshPlatformsWithEmulator()
+          }}
+          disabled={loading}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all ${
+            isRedetectFocused()
+              ? 'bg-accent text-white ring-2 ring-accent scale-105'
+              : 'bg-surface-700 hover:bg-surface-600'
+          }`}
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          Re-detect All Emulators
+        </button>
       </section>
     </div>
   )
