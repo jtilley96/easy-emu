@@ -335,12 +335,12 @@ export default function EmulatorView() {
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // On Linux (Steam Deck), don't intercept Escape - let EmulatorJS handle gamepad input
-      // EmulatorJS handles the Steam Deck's gamepad directly via Gamepad API
-      const isLinux = navigator.platform.toLowerCase().includes('linux')
+      // Log all key events for debugging (throttled)
+      console.log('[EmulatorView] Key:', e.key)
 
-      // Handle Escape to exit (only on non-Linux platforms where keyboard is primary input)
-      if (e.key === 'Escape' && !isLinux) {
+      // Handle Escape to exit - always enabled as emergency exit
+      // This is critical on Steam Deck where gamepad input may not reach EmulatorJS
+      if (e.key === 'Escape') {
         e.preventDefault()
         handleExit()
         return
