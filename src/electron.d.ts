@@ -146,7 +146,7 @@ export interface ElectronAPI {
     getPlatform: () => Promise<NodeJS.Platform>
   }
   library: {
-    scan: (folders: string[]) => Promise<void>
+    scan: (folders: string[]) => Promise<{ added: number; removed: number }>
     getGames: () => Promise<Game[]>
     getGame: (id: string) => Promise<Game | null>
     updateGame: (id: string, data: Partial<Game>) => Promise<void>
@@ -210,6 +210,7 @@ export interface ElectronAPI {
     deleteState: (gameId: string, slot: number) => Promise<void>
     listStates: (gameId: string) => Promise<SaveStateInfo[]>
     getStateScreenshot: (gameId: string, slot: number) => Promise<ArrayBuffer | null>
+    saveScreenshot: (gameId: string, data: ArrayBuffer) => Promise<string>
   }
   updater: {
     check: () => Promise<UpdateInfo | null>

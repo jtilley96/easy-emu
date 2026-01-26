@@ -11,7 +11,7 @@ interface MenuOption {
 
 interface EmulatorMenuModalProps {
   isOpen: boolean
-  onClose: () => void
+  onClose: (shouldResume?: boolean) => void
   isPaused: boolean
   onSaveState: () => void
   onLoadState: () => void
@@ -29,7 +29,7 @@ export default function EmulatorMenuModal({
   onLoadState,
   onScreenshot,
   onPause,
-  onResume,
+  onResume: _onResume, // Kept for interface compatibility but resume is handled by onClose
   onExit
 }: EmulatorMenuModalProps) {
   const [focusedIndex, setFocusedIndex] = useState(0)
@@ -40,8 +40,9 @@ export default function EmulatorMenuModal({
       label: 'Save State',
       icon: <Save size={20} />,
       action: () => {
+        // Don't close here - parent will close menu when save modal opens
+        // This prevents race condition where menu closes and resumes before save modal state updates
         onSaveState()
-        onClose()
       }
     },
     {
@@ -49,8 +50,8 @@ export default function EmulatorMenuModal({
       label: 'Load State',
       icon: <FolderOpen size={20} />,
       action: () => {
+        // Don't close here - parent will close menu when load modal opens
         onLoadState()
-        onClose()
       }
     },
     {
@@ -58,8 +59,8 @@ export default function EmulatorMenuModal({
       label: 'Screenshot',
       icon: <Camera size={20} />,
       action: () => {
+        // Don't close menu - let user take multiple screenshots or continue from menu
         onScreenshot()
-        onClose()
       }
     },
     {
@@ -68,11 +69,13 @@ export default function EmulatorMenuModal({
       icon: isPaused ? <Play size={20} /> : <Pause size={20} />,
       action: () => {
         if (isPaused) {
-          onResume()
+          // Just close - closeMenuModal handles resume with delay
+          onClose()
         } else {
+          // Pause and close menu without resuming (game stays paused)
           onPause()
+          onClose(false)
         }
-        onClose()
       }
     },
     {
@@ -155,7 +158,7 @@ export default function EmulatorMenuModal({
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-700">
           <h2 className="text-xl font-semibold">Game Menu</h2>
           <button
-            onClick={onClose}
+            onClick={() => onClose()}
             className="p-2 rounded-lg hover:bg-surface-700 transition-colors"
             title="Close (B)"
           >

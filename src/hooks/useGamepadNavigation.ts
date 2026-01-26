@@ -13,7 +13,8 @@ export interface UseGamepadNavigationOptions {
   onOption2?: () => void  // Y/Triangle/X
   onLeftBumper?: () => void
   onRightBumper?: () => void
-  onStart?: () => void
+  onSelect?: () => void   // Select/Share/Minus
+  onStart?: () => void    // Start/Options/Plus
   repeatDelay?: number   // ms before repeat starts
   repeatRate?: number    // ms between repeats
   scrollRef?: React.RefObject<HTMLElement>  // Optional ref to scrollable container for right stick scrolling
@@ -34,6 +35,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
     onOption2,
     onLeftBumper,
     onRightBumper,
+    onSelect,
     onStart,
     scrollRef,
     scrollSpeed = 8
@@ -53,9 +55,10 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
     onOption2,
     onLeftBumper,
     onRightBumper,
+    onSelect,
     onStart
   })
-  
+
   // Update refs on every render
   callbacksRef.current = {
     onNavigate,
@@ -65,6 +68,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
     onOption2,
     onLeftBumper,
     onRightBumper,
+    onSelect,
     onStart
   }
 
@@ -161,6 +165,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       const option2Pressed = service.isActionPressed(gamepadIndex, 'option2')
       const lbPressed = service.isActionPressed(gamepadIndex, 'lb')
       const rbPressed = service.isActionPressed(gamepadIndex, 'rb')
+      const selectPressed = service.isActionPressed(gamepadIndex, 'select')
       const startPressed = service.isActionPressed(gamepadIndex, 'start')
 
       // When first becoming enabled, if a direction is pressed, require release first
@@ -178,6 +183,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
         previousButtonStates.current.set('option2', option2Pressed)
         previousButtonStates.current.set('lb', lbPressed)
         previousButtonStates.current.set('rb', rbPressed)
+        previousButtonStates.current.set('select', selectPressed)
         previousButtonStates.current.set('start', startPressed)
         animationFrameId = requestAnimationFrame(poll)
         return  // Skip processing this frame
@@ -221,6 +227,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       if (isJustPressed('option2', option2Pressed)) cbs.onOption2?.()
       if (isJustPressed('lb', lbPressed)) cbs.onLeftBumper?.()
       if (isJustPressed('rb', rbPressed)) cbs.onRightBumper?.()
+      if (isJustPressed('select', selectPressed)) cbs.onSelect?.()
       if (isJustPressed('start', startPressed)) cbs.onStart?.()
 
       // Update previous states
@@ -230,6 +237,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       previousButtonStates.current.set('option2', option2Pressed)
       previousButtonStates.current.set('lb', lbPressed)
       previousButtonStates.current.set('rb', rbPressed)
+      previousButtonStates.current.set('select', selectPressed)
       previousButtonStates.current.set('start', startPressed)
 
       // Handle right stick scrolling

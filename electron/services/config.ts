@@ -26,6 +26,7 @@ export interface AppConfig {
   // Controller settings
   controllerMappings: Record<string, unknown>
   keyboardShortcuts: Record<string, string>
+  emulatorHotkeys: Record<string, string> // F1-F12 key to action mapping
   analogDeadzone: number
   dpadRepeatDelay: number
   dpadRepeatRate: number
@@ -72,6 +73,20 @@ function getDefaultConfig(): AppConfig {
     // Controller defaults
     controllerMappings: {},
     keyboardShortcuts: {},
+    emulatorHotkeys: {
+      F1: 'quickSave',
+      F2: 'quickLoad',
+      F3: 'screenshot',
+      F4: 'fastForward',
+      F5: 'saveState',
+      F6: 'loadState',
+      F7: 'rewind',
+      F8: 'pause',
+      F9: 'mute',
+      F10: 'fullscreen',
+      F11: 'none',
+      F12: 'none'
+    },
     analogDeadzone: 0.15,
     dpadRepeatDelay: 400,
     dpadRepeatRate: 100,

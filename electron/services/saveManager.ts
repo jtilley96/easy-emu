@@ -2,6 +2,7 @@ import { app, ipcMain } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { getGame } from './library'
+import { getConfigValue } from './config'
 
 export interface SaveStateInfo {
   slot: number
@@ -184,6 +185,33 @@ export async function getStateScreenshot(gameId: string, slot: number): Promise<
   return null
 }
 
+// Screenshot saving to configured path
+export async function saveScreenshot(gameId: string, data: ArrayBuffer): Promise<string> {
+  const game = getGame(gameId)
+  const screenshotsPath = getConfigValue('screenshotsPath')
+
+  // Create screenshots directory if it doesn't exist
+  if (!fs.existsSync(screenshotsPath)) {
+    fs.mkdirSync(screenshotsPath, { recursive: true })
+  }
+
+  // Generate filename: GameTitle_YYYYMMDD_HHMMSS.png
+  const now = new Date()
+  const timestamp = now.toISOString().replace(/[-:]/g, '').replace('T', '_').split('.')[0]
+  const gameTitle = (game?.title || 'screenshot').replace(/[<>:"/\\|?*]/g, '_') // Sanitize filename
+  const filename = `${gameTitle}_${timestamp}.png`
+  const filePath = path.join(screenshotsPath, filename)
+
+  try {
+    const buffer = Buffer.from(data)
+    fs.writeFileSync(filePath, buffer)
+    return filePath
+  } catch (error) {
+    console.error('Failed to save screenshot:', error)
+    throw error
+  }
+}
+
 // Register IPC handlers
 export function registerSaveHandlers(): void {
   ipcMain.handle('saves:loadSRAM', async (_event, gameId: string) => {
@@ -212,5 +240,9 @@ export function registerSaveHandlers(): void {
 
   ipcMain.handle('saves:getStateScreenshot', async (_event, gameId: string, slot: number) => {
     return await getStateScreenshot(gameId, slot)
+  })
+
+  ipcMain.handle('saves:saveScreenshot', async (_event, gameId: string, data: ArrayBuffer) => {
+    return await saveScreenshot(gameId, data)
   })
 }

@@ -157,7 +157,12 @@ function detectPlatformFromPath(filePath: string): string {
   return 'unknown'
 }
 
-export async function scanFolders(folders: string[]): Promise<void> {
+export interface ScanResult {
+  added: number
+  removed: number
+}
+
+export async function scanFolders(folders: string[]): Promise<ScanResult> {
   const supportedExtensions = new Set(Object.keys(EXTENSION_PLATFORM_MAP))
   const existingPaths = new Set(libraryData.games.map(g => g.path))
 
@@ -193,11 +198,24 @@ export async function scanFolders(folders: string[]): Promise<void> {
     }
   }
 
+  // Remove games whose files no longer exist
+  const allFilesSet = new Set(allFiles)
+  const gamesToRemove = libraryData.games.filter(g => !fs.existsSync(g.path) || !allFilesSet.has(g.path))
+  const removedCount = gamesToRemove.length
+
+  if (removedCount > 0) {
+    const idsToRemove = new Set(gamesToRemove.map(g => g.id))
+    libraryData.games = libraryData.games.filter(g => !idsToRemove.has(g.id))
+  }
+
   const now = new Date().toISOString()
   const newGameIds: string[] = []
 
+  // Update existingPaths after removal
+  const currentPaths = new Set(libraryData.games.map(g => g.path))
+
   for (const filePath of allFiles) {
-    if (existingPaths.has(filePath)) continue
+    if (currentPaths.has(filePath)) continue
 
     const title = getTitleFromFilename(filePath)
     const platform = detectPlatformFromPath(filePath)
@@ -237,6 +255,8 @@ export async function scanFolders(folders: string[]): Promise<void> {
       }
     }
   }
+
+  return { added: newGameIds.length, removed: removedCount }
 }
 
 export function getGames(): GameRecord[] {
@@ -262,7 +282,7 @@ export function deleteGame(id: string): void {
 
 export function registerLibraryHandlers(): void {
   ipcMain.handle('library:scan', async (_event, folders: string[]) => {
-    await scanFolders(folders)
+    return await scanFolders(folders)
   })
 
   ipcMain.handle('library:getGames', () => {

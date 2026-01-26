@@ -5,7 +5,7 @@ import { useInputStore } from '../../store/inputStore'
 
 export interface EmulatorCanvasRef {
   saveState: () => Promise<ArrayBuffer | null>
-  loadState: (data: ArrayBuffer) => Promise<void>
+  loadState: (data: ArrayBuffer) => Promise<boolean>
   saveSRAM: () => Promise<ArrayBuffer | null>
   screenshot: () => Promise<ArrayBuffer | null>
   pause: () => void
@@ -13,10 +13,18 @@ export interface EmulatorCanvasRef {
   setVolume: (volume: number) => void
   mute: () => void
   unmute: () => void
+  toggleMute: () => void
   enterFullscreen: () => void
   exitFullscreen: () => void
+  toggleFullscreen: () => void
+  quickSave: () => void
+  quickLoad: () => void
+  setFastForward: (enabled: boolean) => void
+  toggleFastForward: () => void
   isPaused: boolean
   isRunning: boolean
+  isMuted: boolean
+  isFastForward: boolean
 }
 
 interface EmulatorCanvasProps {
@@ -523,19 +531,23 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         // Filter console logs before loading EmulatorJS
         setupConsoleFilter()
 
-        // Load the EmulatorJS loader script (only once)
+        // Remove any existing loader script so we can re-initialize EmulatorJS
+        // This is necessary because EmulatorJS only auto-initializes on script load
         const existingScript = document.getElementById('emulatorjs-loader')
-        if (!existingScript) {
-          const script = document.createElement('script')
-          script.src = `${EMULATORJS_CDN}/data/loader.js`
-          script.async = true
-          script.id = 'emulatorjs-loader'
-          script.onerror = () => {
-            isEmulatorLoading = false
-            onError?.(new Error('Failed to load EmulatorJS'))
-          }
-          document.body.appendChild(script)
+        if (existingScript) {
+          existingScript.remove()
         }
+
+        // Load the EmulatorJS loader script
+        const script = document.createElement('script')
+        script.src = `${EMULATORJS_CDN}/data/loader.js`
+        script.async = true
+        script.id = 'emulatorjs-loader'
+        script.onerror = () => {
+          isEmulatorLoading = false
+          onError?.(new Error('Failed to load EmulatorJS'))
+        }
+        document.body.appendChild(script)
 
       } catch (error) {
         console.error('Failed to initialize emulator:', error)
@@ -587,15 +599,15 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
       // Remove all iframes EmulatorJS might have created
       document.querySelectorAll('iframe[src*="emulator"]').forEach(el => el.remove())
 
-      // Clean up EmulatorJS global state (but NOT EJS_STORAGE or scripts - those should persist)
-      // Only clear configuration globals that need to be reset for next game
+      // Clean up EmulatorJS global state
+      // Clear configuration globals that need to be reset for next game
       const ejsGlobals = [
         'EJS_player', 'EJS_gameUrl', 'EJS_gameID', 'EJS_core',
         'EJS_pathtodata', 'EJS_startOnLoaded', 'EJS_volume', 'EJS_color',
         'EJS_onGameStart', 'EJS_emulator', 'EJS_gameData',
         'EJS_gameName', 'EJS_biosUrl', 'EJS_loadStateURL', 'EJS_cheats',
         'EJS_language', 'EJS_settings', 'EJS_CacheLimit', 'EJS_AdUrl',
-        'EJS_Buttons'
+        'EJS_Buttons', 'EJS_ready', 'EJS_onReady'
       ]
       ejsGlobals.forEach(key => {
         try {
@@ -603,9 +615,12 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         } catch { /* ignore */ }
       })
 
-      // NOTE: Do NOT remove EmulatorJS scripts or EJS_STORAGE
-      // Removing and re-adding scripts causes "already declared" errors
-      // EmulatorJS is designed to persist across navigations
+      // Remove the EmulatorJS loader script so it can be re-loaded on next game
+      // This is necessary because EmulatorJS only auto-initializes on script load
+      const loaderScript = document.getElementById('emulatorjs-loader')
+      if (loaderScript) {
+        loaderScript.remove()
+      }
 
       emulatorRef.current = null
 
@@ -641,20 +656,44 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           return null
         }
       },
-      loadState: async (data: ArrayBuffer): Promise<void> => {
+      loadState: async (data: ArrayBuffer): Promise<boolean> => {
         const emu = window.EJS_emulator
         if (!emu?.gameManager) {
           console.warn('[EmulatorCanvas] No gameManager available for loadState')
-          return
+          return false
         }
         try {
           // EmulatorJS expects Uint8Array for setState
           const uint8Data = new Uint8Array(data)
-          if (typeof emu.gameManager.setState === 'function') {
-            emu.gameManager.setState(uint8Data)
+          console.log('[EmulatorCanvas] Loading state, data size:', uint8Data.length)
+
+          // Try multiple EmulatorJS APIs for loading state
+          // Method 1: gameManager.loadState (newer EmulatorJS versions)
+          if (typeof emu.gameManager.loadState === 'function') {
+            console.log('[EmulatorCanvas] Using gameManager.loadState')
+            emu.gameManager.loadState(uint8Data)
+            return true
           }
+
+          // Method 2: gameManager.setState (older EmulatorJS versions)
+          if (typeof emu.gameManager.setState === 'function') {
+            console.log('[EmulatorCanvas] Using gameManager.setState')
+            emu.gameManager.setState(uint8Data)
+            return true
+          }
+
+          // Method 3: Direct emulator loadState (expects ArrayBuffer)
+          if (typeof emu.loadState === 'function') {
+            console.log('[EmulatorCanvas] Using emu.loadState')
+            await emu.loadState(data)
+            return true
+          }
+
+          console.warn('[EmulatorCanvas] No compatible loadState method found')
+          return false
         } catch (err) {
           console.error('[EmulatorCanvas] loadState error:', err)
+          return false
         }
       },
       saveSRAM: async (): Promise<ArrayBuffer | null> => {
@@ -730,6 +769,110 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         if (emu?.exitFullscreen) emu.exitFullscreen()
         else if (emu?.fullscreen) emu.fullscreen(false)
       },
+      toggleMute: () => {
+        const emu = window.EJS_emulator
+        if (emu?.muted) {
+          if (emu?.unmute) emu.unmute()
+          else if (emu?.setVolume) emu.setVolume(1)
+        } else {
+          if (emu?.mute) emu.mute()
+          else if (emu?.setVolume) emu.setVolume(0)
+        }
+      },
+      toggleFullscreen: () => {
+        const emu = window.EJS_emulator
+        // Check document fullscreen state as EmulatorJS may not track it accurately
+        if (document.fullscreenElement) {
+          if (emu?.exitFullscreen) emu.exitFullscreen()
+          else if (emu?.fullscreen) emu.fullscreen(false)
+          else document.exitFullscreen()
+        } else {
+          if (emu?.enterFullscreen) emu.enterFullscreen()
+          else if (emu?.fullscreen) emu.fullscreen(true)
+        }
+      },
+      quickSave: () => {
+        const emu = window.EJS_emulator
+        // Try multiple approaches for quick save
+        if (emu?.quickSave) {
+          emu.quickSave()
+        } else if (emu?.gameManager?.getState) {
+          // Fallback: save state to localStorage as quick save
+          try {
+            const state = emu.gameManager.getState()
+            if (state) {
+              const stateArray = Array.from(state)
+              localStorage.setItem(`EJS_${gameId}_quicksave`, JSON.stringify(stateArray))
+              console.log('[EmulatorCanvas] Quick saved to localStorage')
+            }
+          } catch (err) {
+            console.error('[EmulatorCanvas] Quick save failed:', err)
+          }
+        }
+      },
+      quickLoad: () => {
+        const emu = window.EJS_emulator
+        // Try multiple approaches for quick load
+        if (emu?.quickLoad) {
+          emu.quickLoad()
+        } else if (emu?.gameManager?.loadState || emu?.gameManager?.setState) {
+          // Fallback: load state from localStorage
+          try {
+            const savedState = localStorage.getItem(`EJS_${gameId}_quicksave`)
+            if (savedState) {
+              const stateArray = JSON.parse(savedState)
+              const uint8Data = new Uint8Array(stateArray)
+              if (emu.gameManager.loadState) {
+                emu.gameManager.loadState(uint8Data)
+              } else if (emu.gameManager.setState) {
+                emu.gameManager.setState(uint8Data)
+              }
+              console.log('[EmulatorCanvas] Quick loaded from localStorage')
+            } else {
+              console.warn('[EmulatorCanvas] No quick save found')
+            }
+          } catch (err) {
+            console.error('[EmulatorCanvas] Quick load failed:', err)
+          }
+        }
+      },
+      setFastForward: (enabled: boolean) => {
+        const emu = window.EJS_emulator as any
+        // Try multiple approaches for fast forward
+        if (emu?.setFastForward) {
+          emu.setFastForward(enabled)
+        } else if (emu?.Module?.setFastForward) {
+          emu.Module.setFastForward(enabled)
+        } else if (emu?.gameManager) {
+          // Try setting speed multiplier
+          const gm = emu.gameManager as any
+          if (gm.setSpeed) {
+            gm.setSpeed(enabled ? 3 : 1) // 3x speed when fast forward
+          } else if (gm.setFrameSkip) {
+            gm.setFrameSkip(enabled ? 2 : 0)
+          }
+        }
+        // Store state for getter
+        (window as any)._ejsFastForward = enabled
+      },
+      toggleFastForward: () => {
+        const currentState = (window as any)._ejsFastForward ?? false
+        const newState = !currentState
+        const emu = window.EJS_emulator as any
+        if (emu?.setFastForward) {
+          emu.setFastForward(newState)
+        } else if (emu?.Module?.setFastForward) {
+          emu.Module.setFastForward(newState)
+        } else if (emu?.gameManager) {
+          const gm = emu.gameManager as any
+          if (gm.setSpeed) {
+            gm.setSpeed(newState ? 3 : 1)
+          } else if (gm.setFrameSkip) {
+            gm.setFrameSkip(newState ? 2 : 0)
+          }
+        }
+        (window as any)._ejsFastForward = newState
+      },
       get isPaused() {
         const emu = window.EJS_emulator
         return emu?.paused ?? emu?.isPaused ?? false
@@ -737,6 +880,13 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
       get isRunning() {
         const emu = window.EJS_emulator
         return emu?.started ?? emu?.isRunning ?? false
+      },
+      get isMuted() {
+        const emu = window.EJS_emulator
+        return emu?.muted ?? false
+      },
+      get isFastForward() {
+        return (window as any)._ejsFastForward ?? false
       }
     }), [gameId, saveSRAMToBackend])
 
