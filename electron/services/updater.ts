@@ -84,8 +84,46 @@ function parseVersion(version: string): {
 }
 
 /**
+ * Compare a single prerelease identifier that may contain hyphens
+ * Handles formats like: "alpha", "alpha-10", "alpha-2", "10", "2"
+ * Splits by hyphens and compares each segment numerically if possible
+ */
+function compareIdentifier(identifierA: string, identifierB: string): number {
+  const segmentsA = identifierA.split('-')
+  const segmentsB = identifierB.split('-')
+  const maxLength = Math.max(segmentsA.length, segmentsB.length)
+
+  for (let i = 0; i < maxLength; i++) {
+    const segA = segmentsA[i]
+    const segB = segmentsB[i]
+
+    // If one is missing, the shorter one is less
+    if (segA === undefined) return -1
+    if (segB === undefined) return 1
+
+    // Try to parse as numbers
+    const numA = Number(segA)
+    const numB = Number(segB)
+
+    // If both are numeric, compare as numbers
+    if (!isNaN(numA) && !isNaN(numB)) {
+      if (numA !== numB) return numA - numB
+      continue
+    }
+
+    // Otherwise compare as strings
+    if (segA !== segB) {
+      return segA < segB ? -1 : 1
+    }
+  }
+
+  return 0
+}
+
+/**
  * Compare prerelease identifiers following SemVer rules
- * Each identifier is compared numerically if both are numeric, otherwise lexicographically
+ * Each identifier (separated by '.') is compared using compareIdentifier
+ * which handles hyphen-separated numeric suffixes correctly
  */
 function comparePrerelease(a: string, b: string): number {
   const partsA = a.split('.')
@@ -101,20 +139,9 @@ function comparePrerelease(a: string, b: string): number {
     if (partA === undefined) return -1
     if (partB === undefined) return 1
 
-    // Try to parse as numbers
-    const numA = Number(partA)
-    const numB = Number(partB)
-
-    // If both are numeric, compare as numbers
-    if (!isNaN(numA) && !isNaN(numB)) {
-      if (numA !== numB) return numA - numB
-      continue
-    }
-
-    // Otherwise compare as strings
-    if (partA !== partB) {
-      return partA < partB ? -1 : 1
-    }
+    // Compare identifiers (handles hyphen-separated numeric suffixes)
+    const comparison = compareIdentifier(partA, partB)
+    if (comparison !== 0) return comparison
   }
 
   return 0
@@ -220,6 +247,7 @@ function fetchJSON<T>(url: string): Promise<T> {
           reject(new Error('Failed to parse JSON response'))
         }
       })
+      response.on('error', reject)
     }).on('error', reject)
   })
 }
@@ -264,6 +292,12 @@ function downloadFile(
       response.on('data', (chunk: Buffer) => {
         downloadedBytes += chunk.length
         onProgress(downloadedBytes, totalBytes)
+      })
+
+      response.on('error', (err) => {
+        fileStream.destroy()
+        fs.unlink(destPath, () => {}) // Clean up partial download
+        reject(err)
       })
 
       response.pipe(fileStream)

@@ -1640,15 +1640,13 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
     })
     const unsubscribeAvailable = window.electronAPI.updater.onUpdateAvailable((info) => {
       setUpdateInfo(info)
-      if (info.hasUpdate) {
-        addToast('info', `Update available: v${info.latestVersion}`)
-      }
+      // Toast notification is handled globally in App.tsx
     })
     return () => {
       unsubscribeProgress()
       unsubscribeAvailable()
     }
-  }, [addToast])
+  }, [])
 
   const handleStartMinimizedChange = async (checked: boolean) => {
     setStartMinimized(checked)

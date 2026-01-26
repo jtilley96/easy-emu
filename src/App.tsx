@@ -4,6 +4,7 @@ import { useAppStore } from './store/appStore'
 import { useLibraryStore } from './store/libraryStore'
 import { useEmulatorStore } from './store/emulatorStore'
 import { useInputStore } from './store/inputStore'
+import { useUIStore } from './store/uiStore'
 import Layout from './components/Layout'
 import Library from './pages/Library'
 import GameDetails from './pages/GameDetails'
@@ -20,6 +21,7 @@ function App() {
   const handlePlaySessionEnded = useLibraryStore(s => s.handlePlaySessionEnded)
   const setScrapeProgress = useLibraryStore(s => s.setScrapeProgress)
   const setDownloadProgress = useEmulatorStore(s => s.setDownloadProgress)
+  const addToast = useUIStore(s => s.addToast)
   const {
     keyboardShortcuts,
     loadSettings: loadInputSettings
@@ -54,6 +56,19 @@ function App() {
     )
     return unsubscribe
   }, [isFirstRun, isLoading, setDownloadProgress])
+
+  // Listen for update availability (global notification)
+  useEffect(() => {
+    if (isFirstRun || isLoading) return
+    const unsubscribe = window.electronAPI.updater.onUpdateAvailable(
+      (info) => {
+        if (info.hasUpdate) {
+          addToast('info', `Update available: v${info.latestVersion}`)
+        }
+      }
+    )
+    return unsubscribe
+  }, [isFirstRun, isLoading, addToast])
 
   // Global keyboard shortcut handlers
   const shortcutHandlers = useMemo(() => ({
