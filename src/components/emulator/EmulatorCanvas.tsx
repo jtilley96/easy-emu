@@ -415,6 +415,22 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           return
         }
 
+        // Clear any stale EmulatorJS gamepad settings to ensure fresh defaults
+        // This fixes issues where incorrect button mappings were saved
+        try {
+          const keysToRemove = []
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (key && (key.includes('EJS_') && (key.includes('gamepad') || key.includes('controller') || key.includes('input')))) {
+              keysToRemove.push(key)
+            }
+          }
+          keysToRemove.forEach(key => localStorage.removeItem(key))
+          console.log('[EmulatorCanvas] Cleared stale gamepad settings:', keysToRemove.length, 'keys')
+        } catch (err) {
+          console.warn('[EmulatorCanvas] Failed to clear stale settings:', err)
+        }
+
         // Detect connected gamepad for auto-selection
         // Use the user's physical controller (Xbox/PlayStation/Nintendo) - not platform-specific
         const inputStore = useInputStore.getState()
@@ -422,10 +438,20 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         const gamepadToUse = inputStore.activeGamepadIndex !== null
           ? connectedGamepads.find(g => g.index === inputStore.activeGamepadIndex)
           : connectedGamepads[0]
-        
+
+        // Also check raw navigator.getGamepads() for comparison
+        const rawGamepads = navigator.getGamepads()
+        const rawConnected = Array.from(rawGamepads).filter(g => g && g.connected)
+        console.log('[EmulatorCanvas] Gamepad detection:', {
+          inputStoreGamepads: connectedGamepads.length,
+          rawNavigatorGamepads: rawConnected.length,
+          gamepadToUse: gamepadToUse ? { index: gamepadToUse.index, type: gamepadToUse.type, id: gamepadToUse.id } : null,
+          rawIds: rawConnected.map(g => g?.id)
+        })
+
         if (gamepadToUse) {
           gamepadIndexRef.current = gamepadToUse.index
-          
+
           // Set gamepad preference BEFORE EmulatorJS initializes
           // This way EmulatorJS might pick it up automatically on load
           // Note: EmulatorJS will handle button mapping internally, but we ensure the correct
@@ -435,10 +461,10 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
             localStorage.setItem('EJS_controller', String(gamepadToUse.index))
             localStorage.setItem('gamepad', String(gamepadToUse.index))
             localStorage.setItem('controller', String(gamepadToUse.index))
-            
+
             // Store controller type info for reference (EmulatorJS may not use this directly)
             localStorage.setItem('EJS_controllerType', gamepadToUse.type)
-            
+
             // Also try EJS_STORAGE if it exists
             if (window.EJS_STORAGE && typeof window.EJS_STORAGE === 'object') {
               const storage = window.EJS_STORAGE as any
