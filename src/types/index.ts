@@ -49,6 +49,19 @@ export interface Platform {
   emulators: string[]
 }
 
+export type EmulatorHotkeyAction =
+  | 'none'
+  | 'quickSave'
+  | 'quickLoad'
+  | 'screenshot'
+  | 'fastForward'
+  | 'saveState'
+  | 'loadState'
+  | 'rewind'
+  | 'pause'
+  | 'mute'
+  | 'fullscreen'
+
 export interface AppConfig {
   romFolders: string[]
   emulatorPaths: Record<string, string>
@@ -60,6 +73,7 @@ export interface AppConfig {
   autoScrape: boolean
   startMinimized: boolean
   checkUpdates: boolean
+  emulatorHotkeys?: Record<string, EmulatorHotkeyAction>
 }
 
 export interface ScanProgress {

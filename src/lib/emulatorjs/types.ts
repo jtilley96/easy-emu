@@ -55,6 +55,8 @@ export interface EmulatorJSInstance {
   saveState: () => Promise<ArrayBuffer>
   loadState: (data: ArrayBuffer) => Promise<void>
   getSRAM: () => ArrayBuffer | null
+  quickSave?: () => void
+  quickLoad?: () => void
 
   // Audio/Video
   setVolume: (volume: number) => void
@@ -65,11 +67,18 @@ export interface EmulatorJSInstance {
   fullscreen?: (enable: boolean) => void
   screenshot: () => Promise<ArrayBuffer>
 
+  // Speed control
+  setFastForward?: (enabled: boolean) => void
+  fastForward?: boolean
+  setRewind?: (enabled: boolean) => void
+  rewind?: boolean
+
   // Properties
   isPaused?: boolean
   isRunning?: boolean
   paused?: boolean
   started?: boolean
+  muted?: boolean
   canvas?: HTMLCanvasElement
 
   // Internal game manager

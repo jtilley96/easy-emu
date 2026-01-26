@@ -9,6 +9,7 @@ import { useEmulatorStore } from '../store/emulatorStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
+import type { EmulatorHotkeyAction } from '../types'
 
 export default function EmulatorView() {
   const { gameId } = useParams<{ gameId: string }>()
@@ -30,10 +31,27 @@ export default function EmulatorView() {
   const [saveModalMode, setSaveModalMode] = useState<'save' | 'load'>('save')
   const [menuModalOpen, setMenuModalOpen] = useState(false)
   const [sessionStartTime] = useState(Date.now())
+  const [_isFastForward, setIsFastForward] = useState(false)
+  const [emulatorHotkeys, setEmulatorHotkeys] = useState<Record<string, EmulatorHotkeyAction>>({})
 
   const hideHUDTimeout = useRef<NodeJS.Timeout | null>(null)
 
   const game = games.find(g => g.id === gameId)
+
+  // Load hotkey configuration
+  useEffect(() => {
+    const loadHotkeys = async () => {
+      try {
+        const hotkeys = await window.electronAPI.config.get('emulatorHotkeys')
+        if (hotkeys) {
+          setEmulatorHotkeys(hotkeys as Record<string, EmulatorHotkeyAction>)
+        }
+      } catch (err) {
+        console.error('Failed to load emulator hotkeys:', err)
+      }
+    }
+    loadHotkeys()
+  }, [])
 
   // Start game session on mount
   useEffect(() => {
@@ -64,38 +82,6 @@ export default function EmulatorView() {
     }
   }, [gameId])
 
-
-  // Handle keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          e.preventDefault()
-          handleExit()
-          break
-        case 'p':
-        case 'P':
-          e.preventDefault()
-          togglePause()
-          break
-        case 'F5':
-          e.preventDefault()
-          openSaveModal()
-          break
-        case 'F8':
-          e.preventDefault()
-          openLoadModal()
-          break
-        case 'F12':
-          e.preventDefault()
-          handleScreenshot()
-          break
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isPaused])
 
   // Handle select button to open menu
   // Note: Start button is NOT intercepted - it passes through to the emulated game
@@ -291,6 +277,93 @@ export default function EmulatorView() {
       addToast('error', 'Failed to capture screenshot')
     }
   }
+
+  // Execute hotkey action
+  const executeHotkeyAction = useCallback((action: EmulatorHotkeyAction) => {
+    switch (action) {
+      case 'quickSave':
+        emulatorRef.current?.quickSave()
+        // Defer toast to avoid setState during render
+        setTimeout(() => addToast('success', 'Quick saved'), 0)
+        break
+      case 'quickLoad':
+        emulatorRef.current?.quickLoad()
+        // Defer toast to avoid setState during render
+        setTimeout(() => addToast('success', 'Quick loaded'), 0)
+        break
+      case 'screenshot':
+        handleScreenshot()
+        break
+      case 'fastForward':
+        setIsFastForward(prev => {
+          const newState = !prev
+          emulatorRef.current?.setFastForward(newState)
+          // Defer toast to avoid setState during render
+          setTimeout(() => addToast('info', newState ? 'Fast forward ON' : 'Fast forward OFF'), 0)
+          return newState
+        })
+        break
+      case 'saveState':
+        openSaveModal()
+        break
+      case 'loadState':
+        openLoadModal()
+        break
+      case 'rewind':
+        // Rewind is typically a hold action, but we'll toggle it for key press
+        setTimeout(() => addToast('info', 'Rewind not available for this core'), 0)
+        break
+      case 'pause':
+        togglePause()
+        break
+      case 'mute':
+        emulatorRef.current?.toggleMute()
+        // Defer toast to avoid setState during render
+        setTimeout(() => addToast('info', 'Mute toggled'), 0)
+        break
+      case 'fullscreen':
+        toggleFullscreen()
+        break
+      case 'none':
+      default:
+        break
+    }
+  }, [addToast, handleScreenshot, openSaveModal, openLoadModal, togglePause, toggleFullscreen])
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Always handle Escape to exit
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        handleExit()
+        return
+      }
+
+      // Handle P for pause (legacy shortcut)
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault()
+        togglePause()
+        return
+      }
+
+      // Handle configurable F1-F12 hotkeys
+      const fKeyMatch = e.key.match(/^F(\d+)$/)
+      if (fKeyMatch) {
+        const fKeyNum = parseInt(fKeyMatch[1])
+        if (fKeyNum >= 1 && fKeyNum <= 12) {
+          const action = emulatorHotkeys[e.key] as EmulatorHotkeyAction
+          if (action && action !== 'none') {
+            e.preventDefault()
+            executeHotkeyAction(action)
+          }
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isPaused, emulatorHotkeys, executeHotkeyAction, handleExit, togglePause])
 
   // Error state
   if (error) {

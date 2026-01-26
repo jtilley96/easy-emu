@@ -13,10 +13,18 @@ export interface EmulatorCanvasRef {
   setVolume: (volume: number) => void
   mute: () => void
   unmute: () => void
+  toggleMute: () => void
   enterFullscreen: () => void
   exitFullscreen: () => void
+  toggleFullscreen: () => void
+  quickSave: () => void
+  quickLoad: () => void
+  setFastForward: (enabled: boolean) => void
+  toggleFastForward: () => void
   isPaused: boolean
   isRunning: boolean
+  isMuted: boolean
+  isFastForward: boolean
 }
 
 interface EmulatorCanvasProps {
@@ -761,6 +769,110 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         if (emu?.exitFullscreen) emu.exitFullscreen()
         else if (emu?.fullscreen) emu.fullscreen(false)
       },
+      toggleMute: () => {
+        const emu = window.EJS_emulator
+        if (emu?.muted) {
+          if (emu?.unmute) emu.unmute()
+          else if (emu?.setVolume) emu.setVolume(1)
+        } else {
+          if (emu?.mute) emu.mute()
+          else if (emu?.setVolume) emu.setVolume(0)
+        }
+      },
+      toggleFullscreen: () => {
+        const emu = window.EJS_emulator
+        // Check document fullscreen state as EmulatorJS may not track it accurately
+        if (document.fullscreenElement) {
+          if (emu?.exitFullscreen) emu.exitFullscreen()
+          else if (emu?.fullscreen) emu.fullscreen(false)
+          else document.exitFullscreen()
+        } else {
+          if (emu?.enterFullscreen) emu.enterFullscreen()
+          else if (emu?.fullscreen) emu.fullscreen(true)
+        }
+      },
+      quickSave: () => {
+        const emu = window.EJS_emulator
+        // Try multiple approaches for quick save
+        if (emu?.quickSave) {
+          emu.quickSave()
+        } else if (emu?.gameManager?.getState) {
+          // Fallback: save state to localStorage as quick save
+          try {
+            const state = emu.gameManager.getState()
+            if (state) {
+              const stateArray = Array.from(state)
+              localStorage.setItem(`EJS_${gameId}_quicksave`, JSON.stringify(stateArray))
+              console.log('[EmulatorCanvas] Quick saved to localStorage')
+            }
+          } catch (err) {
+            console.error('[EmulatorCanvas] Quick save failed:', err)
+          }
+        }
+      },
+      quickLoad: () => {
+        const emu = window.EJS_emulator
+        // Try multiple approaches for quick load
+        if (emu?.quickLoad) {
+          emu.quickLoad()
+        } else if (emu?.gameManager?.loadState || emu?.gameManager?.setState) {
+          // Fallback: load state from localStorage
+          try {
+            const savedState = localStorage.getItem(`EJS_${gameId}_quicksave`)
+            if (savedState) {
+              const stateArray = JSON.parse(savedState)
+              const uint8Data = new Uint8Array(stateArray)
+              if (emu.gameManager.loadState) {
+                emu.gameManager.loadState(uint8Data)
+              } else if (emu.gameManager.setState) {
+                emu.gameManager.setState(uint8Data)
+              }
+              console.log('[EmulatorCanvas] Quick loaded from localStorage')
+            } else {
+              console.warn('[EmulatorCanvas] No quick save found')
+            }
+          } catch (err) {
+            console.error('[EmulatorCanvas] Quick load failed:', err)
+          }
+        }
+      },
+      setFastForward: (enabled: boolean) => {
+        const emu = window.EJS_emulator as any
+        // Try multiple approaches for fast forward
+        if (emu?.setFastForward) {
+          emu.setFastForward(enabled)
+        } else if (emu?.Module?.setFastForward) {
+          emu.Module.setFastForward(enabled)
+        } else if (emu?.gameManager) {
+          // Try setting speed multiplier
+          const gm = emu.gameManager as any
+          if (gm.setSpeed) {
+            gm.setSpeed(enabled ? 3 : 1) // 3x speed when fast forward
+          } else if (gm.setFrameSkip) {
+            gm.setFrameSkip(enabled ? 2 : 0)
+          }
+        }
+        // Store state for getter
+        (window as any)._ejsFastForward = enabled
+      },
+      toggleFastForward: () => {
+        const currentState = (window as any)._ejsFastForward ?? false
+        const newState = !currentState
+        const emu = window.EJS_emulator as any
+        if (emu?.setFastForward) {
+          emu.setFastForward(newState)
+        } else if (emu?.Module?.setFastForward) {
+          emu.Module.setFastForward(newState)
+        } else if (emu?.gameManager) {
+          const gm = emu.gameManager as any
+          if (gm.setSpeed) {
+            gm.setSpeed(newState ? 3 : 1)
+          } else if (gm.setFrameSkip) {
+            gm.setFrameSkip(newState ? 2 : 0)
+          }
+        }
+        (window as any)._ejsFastForward = newState
+      },
       get isPaused() {
         const emu = window.EJS_emulator
         return emu?.paused ?? emu?.isPaused ?? false
@@ -768,6 +880,13 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
       get isRunning() {
         const emu = window.EJS_emulator
         return emu?.started ?? emu?.isRunning ?? false
+      },
+      get isMuted() {
+        const emu = window.EJS_emulator
+        return emu?.muted ?? false
+      },
+      get isFastForward() {
+        return (window as any)._ejsFastForward ?? false
       }
     }), [gameId, saveSRAMToBackend])
 

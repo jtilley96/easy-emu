@@ -218,8 +218,14 @@ export default function SystemBrowser() {
                 </span>
               ) : null
             })()}
+            {platformInfo?.name}
           </h1>
           <p className="text-surface-400">{platformGames.length} games</p>
+          {platformInfo?.extensions && (
+            <p className="text-surface-500 text-sm mt-1">
+              Supported formats: {platformInfo.extensions.join(', ')}
+            </p>
+          )}
         </div>
 
         <div className="p-6">

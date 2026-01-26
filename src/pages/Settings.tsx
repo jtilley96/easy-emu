@@ -18,7 +18,8 @@ import {
   Loader2,
   Settings2,
   XCircle,
-  Cpu
+  Cpu,
+  Sparkles
 } from 'lucide-react'
 import { PLATFORMS } from '../constants/platforms'
 import { useAppStore } from '../store/appStore'
@@ -55,7 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'cores', label: 'Embedded Cores', icon: <Cpu size={18} /> },
   { id: 'bios', label: 'BIOS Files', icon: <HardDrive size={18} /> },
   { id: 'paths', label: 'Paths', icon: <Database size={18} /> },
-  { id: 'metadata', label: 'Metadata', icon: <Download size={18} /> },
+  { id: 'metadata', label: 'Metadata', icon: <Sparkles size={18} /> },
   { id: 'controllers', label: 'Controllers', icon: <Sliders size={18} /> },
   { id: 'general', label: 'General', icon: <Info size={18} /> }
 ]
@@ -1999,7 +2000,7 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
         </div>
       </section>
 
-      <section>
+      <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Reset</h3>
         <div className="flex gap-3">
           <button
@@ -2030,6 +2031,44 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
             Reset to Defaults
           </button>
         </div>
+      </section>
+
+      <section>
+        <h3 className="text-lg font-semibold mb-4">Supported File Types</h3>
+        <p className="text-surface-400 text-sm mb-4">
+          These are the ROM/game file formats that can be scanned and played for each system.
+        </p>
+        <div className="bg-surface-800 rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-surface-700">
+                <th className="text-left px-4 py-2 font-medium">System</th>
+                <th className="text-left px-4 py-2 font-medium">Supported Formats</th>
+              </tr>
+            </thead>
+            <tbody>
+              {PLATFORMS.map((platform, index) => (
+                <tr
+                  key={platform.id}
+                  className={index % 2 === 0 ? 'bg-surface-800' : 'bg-surface-800/50'}
+                >
+                  <td className="px-4 py-2 font-medium text-surface-200">
+                    {platform.shortName}
+                  </td>
+                  <td className="px-4 py-2 text-surface-400">
+                    <code className="text-xs">
+                      {platform.extensions.join(', ')}
+                    </code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-surface-500 text-xs mt-3">
+          Note: Some formats like .iso, .bin, and .cue are shared across multiple systems.
+          The scanner uses folder names to help identify the correct platform.
+        </p>
       </section>
     </div>
   )

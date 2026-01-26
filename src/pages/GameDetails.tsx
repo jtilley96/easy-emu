@@ -10,7 +10,7 @@ import {
   Edit,
   Trash2,
   Settings2,
-  Download,
+  Sparkles,
   Loader2,
   ChevronDown,
   Monitor,
@@ -463,7 +463,7 @@ export default function GameDetails() {
                 }`}
                 title="Fetch metadata from Hasheous"
               >
-                {scraping ? <Loader2 size={20} className="animate-spin" /> : <Download size={20} />}
+                {scraping ? <Loader2 size={20} className="animate-spin" /> : <Sparkles size={20} />}
               </button>
 
               <button
