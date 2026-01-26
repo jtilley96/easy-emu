@@ -5,6 +5,7 @@ import fs from 'fs'
 import { getConfigValue, setConfigValue } from './config'
 import { getGame, updateGame } from './library'
 import type { GameRecord } from './library'
+import { configureDolphinController, getDolphinConfigPath, hasDolphinConfig, type ControllerType } from './dolphinConfig'
 
 let mainWindowRef: BrowserWindow | null = null
 
@@ -456,6 +457,19 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
     throw new Error('ROM file not found. It may have been moved or deleted.')
   }
 
+  // Auto-configure Dolphin controller if launching a GameCube/Wii game
+  if (emulatorDef.id === 'dolphin') {
+    // Get the configured controller type from config, default to 'xbox' (most common)
+    const controllerType = (getConfigValue('dolphinControllerType') as ControllerType) || 'xbox'
+    // Get the stored device name (for Bluetooth controllers like "Xbox Wireless Controller")
+    const deviceName = getConfigValue('dolphinDeviceName') as string | undefined
+    const configResult = configureDolphinController(controllerType, deviceName)
+    if (!configResult.success) {
+      console.warn('[Emulators] Failed to configure Dolphin controller:', configResult.error)
+      // Continue anyway - Dolphin may still work with existing config
+    }
+  }
+
   const ctx: LaunchContext = { platform: game.platform, emulatorPath }
   const args = emulatorDef.launchArgs(romPath, ctx)
   const cwd = path.dirname(emulatorPath)
@@ -584,5 +598,29 @@ export function registerEmulatorHandlers(): void {
         finish(match ? match[1] : first.slice(0, 32) || 'Unknown')
       })
     })
+  })
+
+  // Dolphin controller configuration handlers
+  ipcMain.handle('emulators:configureDolphinController', (_event, controllerType: ControllerType, deviceName?: string) => {
+    // Store the controller type preference
+    setConfigValue('dolphinControllerType', controllerType)
+    // Store the device name if provided (for Bluetooth controllers)
+    if (deviceName) {
+      setConfigValue('dolphinDeviceName', deviceName)
+    }
+    // Apply the configuration immediately with the actual device name
+    return configureDolphinController(controllerType, deviceName)
+  })
+
+  ipcMain.handle('emulators:getDolphinControllerType', () => {
+    return (getConfigValue('dolphinControllerType') as ControllerType) || 'xbox'
+  })
+
+  ipcMain.handle('emulators:getDolphinConfigPath', () => {
+    return getDolphinConfigPath()
+  })
+
+  ipcMain.handle('emulators:hasDolphinConfig', () => {
+    return hasDolphinConfig()
   })
 }

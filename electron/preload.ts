@@ -62,7 +62,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         callback(payload.gameId, payload.durationMinutes)
       ipcRenderer.on('emulators:playSessionEnded', fn)
       return () => ipcRenderer.removeListener('emulators:playSessionEnded', fn)
-    }
+    },
+    // Dolphin controller configuration
+    configureDolphinController: (controllerType: 'xbox' | 'playstation' | 'nintendo' | 'generic', deviceName?: string) =>
+      ipcRenderer.invoke('emulators:configureDolphinController', controllerType, deviceName),
+    getDolphinControllerType: () => ipcRenderer.invoke('emulators:getDolphinControllerType'),
+    getDolphinConfigPath: () => ipcRenderer.invoke('emulators:getDolphinConfigPath'),
+    hasDolphinConfig: () => ipcRenderer.invoke('emulators:hasDolphinConfig')
   },
 
   // Metadata operations
@@ -206,6 +212,11 @@ export interface ElectronAPI {
     openSettings: (emulatorId: string) => Promise<void>
     getVersion: (emulatorId: string) => Promise<string>
     onPlaySessionEnded: (callback: (gameId: string, durationMinutes: number) => void) => () => void
+    // Dolphin controller configuration
+    configureDolphinController: (controllerType: DolphinControllerType, deviceName?: string) => Promise<{ success: boolean; error?: string }>
+    getDolphinControllerType: () => Promise<DolphinControllerType>
+    getDolphinConfigPath: () => Promise<string>
+    hasDolphinConfig: () => Promise<boolean>
   }
   metadata: {
     update: (gameId: string, metadata: Partial<GameMetadata>) => Promise<void>
@@ -286,6 +297,8 @@ interface EmulatorInfo {
   canInstall: boolean
   downloadUrl: string | null
 }
+
+type DolphinControllerType = 'xbox' | 'playstation' | 'nintendo' | 'generic'
 
 interface BiosDefinition {
   id: string

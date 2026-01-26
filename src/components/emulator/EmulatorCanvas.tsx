@@ -237,13 +237,23 @@ function autoSelectGamepad(gamepadIndex: number): void {
             // The format is: "{Gamepad ID}_{index}"
             let selected = false
             let matchedOptionIndex = -1
-            
+
+            // Define controller type patterns for flexible matching
+            // This helps match Bluetooth controllers with different names (e.g., "Xbox Wireless Controller")
+            const xboxPatterns = ['xbox', 'xinput', 'microsoft']
+            const playstationPatterns = ['playstation', 'dualshock', 'dualsense', 'sony', 'ps4', 'ps5']
+            const nintendoPatterns = ['nintendo', 'switch', 'joy-con', 'pro controller']
+
+            const isXboxController = xboxPatterns.some(p => targetGamepadIdLower.includes(p))
+            const isPlaystationController = playstationPatterns.some(p => targetGamepadIdLower.includes(p))
+            const isNintendoController = nintendoPatterns.some(p => targetGamepadIdLower.includes(p))
+
             // Try multiple matching strategies
             for (let i = 0; i < gamepadSelect.options.length; i++) {
               const option = gamepadSelect.options[i]
               const optionValue = option.value.trim()
               const optionText = option.text.trim().toLowerCase()
-              
+
               // Strategy 1: Match by gamepad ID in value (e.g., "Xbox One Game Controller (STANDARD GAMEPAD)_0")
               // EmulatorJS uses format: "{gamepadId}_{index}"
               if (targetGamepadId && optionValue.includes(targetGamepadId)) {
@@ -255,7 +265,7 @@ function autoSelectGamepad(gamepadIndex: number): void {
                   break
                 }
               }
-              
+
               // Strategy 2: Match by gamepad ID in text
               if (targetGamepadId && optionText.includes(targetGamepadIdLower)) {
                 const indexMatch = optionValue.match(/_(\d+)$/) || optionText.match(/\b(\d+)\b/)
@@ -265,24 +275,48 @@ function autoSelectGamepad(gamepadIndex: number): void {
                   break
                 }
               }
-              
-              // Strategy 3: Direct index match in value (e.g., "0", "gamepad-0")
+
+              // Strategy 3: Match by controller TYPE (handles Bluetooth controllers with different names)
+              // e.g., "Xbox Wireless Controller" should match an option containing "Xbox" + same index
+              const optionIsXbox = xboxPatterns.some(p => optionText.includes(p))
+              const optionIsPlaystation = playstationPatterns.some(p => optionText.includes(p))
+              const optionIsNintendo = nintendoPatterns.some(p => optionText.includes(p))
+
+              if ((isXboxController && optionIsXbox) ||
+                  (isPlaystationController && optionIsPlaystation) ||
+                  (isNintendoController && optionIsNintendo)) {
+                // Check if index matches
+                const indexMatch = optionValue.match(/_(\d+)$/) || optionText.match(/\b(\d+)\b/)
+                if (indexMatch && parseInt(indexMatch[1]) === gamepadIndex) {
+                  matchedOptionIndex = i
+                  selected = true
+                  break
+                }
+                // If no index in option but this is the first option of matching type, use it
+                if (!indexMatch && gamepadIndex === 0) {
+                  matchedOptionIndex = i
+                  selected = true
+                  break
+                }
+              }
+
+              // Strategy 4: Direct index match in value (e.g., "0", "gamepad-0")
               if (optionValue === String(gamepadIndex) || optionValue.endsWith(`_${gamepadIndex}`)) {
                 matchedOptionIndex = i
                 selected = true
                 break
               }
-              
-              // Strategy 4: Index in text (e.g., "Gamepad 0", "Controller 0")
+
+              // Strategy 5: Index in text (e.g., "Gamepad 0", "Controller 0")
               const indexInText = optionText.match(/\b(\d+)\b/)
               if (indexInText && parseInt(indexInText[1]) === gamepadIndex) {
                 matchedOptionIndex = i
                 selected = true
                 break
               }
-              
-              // Strategy 5: Value contains index pattern (e.g., "gamepad-0", "controller0", "something_0")
-              if (optionValue.includes(String(gamepadIndex)) && 
+
+              // Strategy 6: Value contains index pattern (e.g., "gamepad-0", "controller0", "something_0")
+              if (optionValue.includes(String(gamepadIndex)) &&
                   (optionValue.includes('gamepad') || optionValue.includes('controller') || optionValue.includes('_'))) {
                 matchedOptionIndex = i
                 selected = true
