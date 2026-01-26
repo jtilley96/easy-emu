@@ -142,7 +142,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadState: (gameId: string, slot: number) => ipcRenderer.invoke('saves:loadState', gameId, slot),
     deleteState: (gameId: string, slot: number) => ipcRenderer.invoke('saves:deleteState', gameId, slot),
     listStates: (gameId: string) => ipcRenderer.invoke('saves:listStates', gameId),
-    getStateScreenshot: (gameId: string, slot: number) => ipcRenderer.invoke('saves:getStateScreenshot', gameId, slot)
+    getStateScreenshot: (gameId: string, slot: number) => ipcRenderer.invoke('saves:getStateScreenshot', gameId, slot),
+    saveScreenshot: (gameId: string, data: ArrayBuffer) => ipcRenderer.invoke('saves:saveScreenshot', gameId, data)
   },
 
   // Updater operations

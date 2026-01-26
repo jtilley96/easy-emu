@@ -220,6 +220,7 @@ declare global {
       deleteState: (gameId: string, slot: number) => Promise<void>
       listStates: (gameId: string) => Promise<SaveStateInfo[]>
       getStateScreenshot: (gameId: string, slot: number) => Promise<ArrayBuffer | null>
+      saveScreenshot: (gameId: string, data: ArrayBuffer) => Promise<string>
     }
   }
 

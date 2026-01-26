@@ -5,7 +5,7 @@ import { useInputStore } from '../../store/inputStore'
 
 export interface EmulatorCanvasRef {
   saveState: () => Promise<ArrayBuffer | null>
-  loadState: (data: ArrayBuffer) => Promise<void>
+  loadState: (data: ArrayBuffer) => Promise<boolean>
   saveSRAM: () => Promise<ArrayBuffer | null>
   screenshot: () => Promise<ArrayBuffer | null>
   pause: () => void
@@ -523,19 +523,23 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         // Filter console logs before loading EmulatorJS
         setupConsoleFilter()
 
-        // Load the EmulatorJS loader script (only once)
+        // Remove any existing loader script so we can re-initialize EmulatorJS
+        // This is necessary because EmulatorJS only auto-initializes on script load
         const existingScript = document.getElementById('emulatorjs-loader')
-        if (!existingScript) {
-          const script = document.createElement('script')
-          script.src = `${EMULATORJS_CDN}/data/loader.js`
-          script.async = true
-          script.id = 'emulatorjs-loader'
-          script.onerror = () => {
-            isEmulatorLoading = false
-            onError?.(new Error('Failed to load EmulatorJS'))
-          }
-          document.body.appendChild(script)
+        if (existingScript) {
+          existingScript.remove()
         }
+
+        // Load the EmulatorJS loader script
+        const script = document.createElement('script')
+        script.src = `${EMULATORJS_CDN}/data/loader.js`
+        script.async = true
+        script.id = 'emulatorjs-loader'
+        script.onerror = () => {
+          isEmulatorLoading = false
+          onError?.(new Error('Failed to load EmulatorJS'))
+        }
+        document.body.appendChild(script)
 
       } catch (error) {
         console.error('Failed to initialize emulator:', error)
@@ -587,15 +591,15 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
       // Remove all iframes EmulatorJS might have created
       document.querySelectorAll('iframe[src*="emulator"]').forEach(el => el.remove())
 
-      // Clean up EmulatorJS global state (but NOT EJS_STORAGE or scripts - those should persist)
-      // Only clear configuration globals that need to be reset for next game
+      // Clean up EmulatorJS global state
+      // Clear configuration globals that need to be reset for next game
       const ejsGlobals = [
         'EJS_player', 'EJS_gameUrl', 'EJS_gameID', 'EJS_core',
         'EJS_pathtodata', 'EJS_startOnLoaded', 'EJS_volume', 'EJS_color',
         'EJS_onGameStart', 'EJS_emulator', 'EJS_gameData',
         'EJS_gameName', 'EJS_biosUrl', 'EJS_loadStateURL', 'EJS_cheats',
         'EJS_language', 'EJS_settings', 'EJS_CacheLimit', 'EJS_AdUrl',
-        'EJS_Buttons'
+        'EJS_Buttons', 'EJS_ready', 'EJS_onReady'
       ]
       ejsGlobals.forEach(key => {
         try {
@@ -603,9 +607,12 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         } catch { /* ignore */ }
       })
 
-      // NOTE: Do NOT remove EmulatorJS scripts or EJS_STORAGE
-      // Removing and re-adding scripts causes "already declared" errors
-      // EmulatorJS is designed to persist across navigations
+      // Remove the EmulatorJS loader script so it can be re-loaded on next game
+      // This is necessary because EmulatorJS only auto-initializes on script load
+      const loaderScript = document.getElementById('emulatorjs-loader')
+      if (loaderScript) {
+        loaderScript.remove()
+      }
 
       emulatorRef.current = null
 
@@ -641,20 +648,44 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           return null
         }
       },
-      loadState: async (data: ArrayBuffer): Promise<void> => {
+      loadState: async (data: ArrayBuffer): Promise<boolean> => {
         const emu = window.EJS_emulator
         if (!emu?.gameManager) {
           console.warn('[EmulatorCanvas] No gameManager available for loadState')
-          return
+          return false
         }
         try {
           // EmulatorJS expects Uint8Array for setState
           const uint8Data = new Uint8Array(data)
-          if (typeof emu.gameManager.setState === 'function') {
-            emu.gameManager.setState(uint8Data)
+          console.log('[EmulatorCanvas] Loading state, data size:', uint8Data.length)
+
+          // Try multiple EmulatorJS APIs for loading state
+          // Method 1: gameManager.loadState (newer EmulatorJS versions)
+          if (typeof emu.gameManager.loadState === 'function') {
+            console.log('[EmulatorCanvas] Using gameManager.loadState')
+            emu.gameManager.loadState(uint8Data)
+            return true
           }
+
+          // Method 2: gameManager.setState (older EmulatorJS versions)
+          if (typeof emu.gameManager.setState === 'function') {
+            console.log('[EmulatorCanvas] Using gameManager.setState')
+            emu.gameManager.setState(uint8Data)
+            return true
+          }
+
+          // Method 3: Direct emulator loadState (expects ArrayBuffer)
+          if (typeof emu.loadState === 'function') {
+            console.log('[EmulatorCanvas] Using emu.loadState')
+            await emu.loadState(data)
+            return true
+          }
+
+          console.warn('[EmulatorCanvas] No compatible loadState method found')
+          return false
         } catch (err) {
           console.error('[EmulatorCanvas] loadState error:', err)
+          return false
         }
       },
       saveSRAM: async (): Promise<ArrayBuffer | null> => {

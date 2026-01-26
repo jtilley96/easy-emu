@@ -98,7 +98,9 @@ export default function EmulatorView() {
   }, [isPaused])
 
   // Handle select button to open menu
-  const handleSelect = useCallback(() => {
+  // Note: Start button is NOT intercepted - it passes through to the emulated game
+  // Use keyboard P or the HUD button to pause the emulator
+  const handleSelectButton = useCallback(() => {
     if (!menuModalOpen && !saveModalOpen && !isLoading) {
       setMenuModalOpen(true)
       emulatorRef.current?.pause()
@@ -106,10 +108,10 @@ export default function EmulatorView() {
     }
   }, [menuModalOpen, saveModalOpen, isLoading])
 
-  // Gamepad navigation for select button
+  // Gamepad navigation - Select opens menu
   useGamepadNavigation({
     enabled: !menuModalOpen && !saveModalOpen && !isLoading,
-    onStart: handleSelect
+    onSelect: handleSelectButton
   })
 
   // Auto-hide HUD after inactivity
@@ -195,6 +197,7 @@ export default function EmulatorView() {
   }
 
   const openSaveModal = () => {
+    setMenuModalOpen(false) // Close menu if open (without resuming)
     setSaveModalMode('save')
     setSaveModalOpen(true)
     emulatorRef.current?.pause()
@@ -202,6 +205,7 @@ export default function EmulatorView() {
   }
 
   const openLoadModal = () => {
+    setMenuModalOpen(false) // Close menu if open (without resuming)
     setSaveModalMode('load')
     setSaveModalOpen(true)
     emulatorRef.current?.pause()
@@ -210,14 +214,23 @@ export default function EmulatorView() {
 
   const closeSaveModal = () => {
     setSaveModalOpen(false)
-  }
-
-  const closeMenuModal = () => {
-    setMenuModalOpen(false)
-    // Resume emulator when menu closes (unless paused for another reason)
-    if (!saveModalOpen) {
+    // Resume game when save/load modal closes
+    // Add a small delay to prevent the closing button press from being sent to the game
+    setTimeout(() => {
       emulatorRef.current?.resume()
       setIsPaused(false)
+    }, 100)
+  }
+
+  const closeMenuModal = (shouldResume = true) => {
+    setMenuModalOpen(false)
+    // Resume emulator when menu closes (unless paused for another reason or explicitly told not to)
+    // Add a small delay to prevent the closing button press from being sent to the game
+    if (shouldResume && !saveModalOpen) {
+      setTimeout(() => {
+        emulatorRef.current?.resume()
+        setIsPaused(false)
+      }, 100)
     }
   }
 
@@ -250,12 +263,14 @@ export default function EmulatorView() {
         throw new Error('Save state not found')
       }
 
-      await emulatorRef.current?.loadState(stateData)
-      addToast('success', `Loaded slot ${slot + 1}`)
-
-      // Resume after loading
-      emulatorRef.current?.resume()
-      setIsPaused(false)
+      const success = await emulatorRef.current?.loadState(stateData)
+      if (success) {
+        addToast('success', `Loaded slot ${slot + 1}`)
+      } else {
+        addToast('error', 'Failed to restore state - emulator may not support this feature')
+      }
+      // Note: Don't resume here - closeSaveModal will handle resume with delay
+      // to prevent button press from being sent to game
     } catch (err) {
       addToast('error', `Failed to load state: ${(err as Error).message}`)
       throw err
@@ -263,17 +278,13 @@ export default function EmulatorView() {
   }
 
   const handleScreenshot = async () => {
+    if (!gameId) return
+
     try {
       const data = await emulatorRef.current?.screenshot()
       if (data) {
-        // Create blob and trigger download
-        const blob = new Blob([data], { type: 'image/png' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `${game?.title || 'screenshot'}_${Date.now()}.png`
-        a.click()
-        URL.revokeObjectURL(url)
+        // Save to configured screenshots path
+        await window.electronAPI.saves.saveScreenshot(gameId, data)
         addToast('success', 'Screenshot saved')
       }
     } catch (err) {
@@ -388,8 +399,11 @@ export default function EmulatorView() {
           setIsPaused(true)
         }}
         onResume={() => {
-          emulatorRef.current?.resume()
-          setIsPaused(false)
+          // Delay resume to prevent button press from being sent to game
+          setTimeout(() => {
+            emulatorRef.current?.resume()
+            setIsPaused(false)
+          }, 100)
         }}
         onExit={handleExit}
       />

@@ -35,6 +35,7 @@ export interface EmulatorJSConfig {
 export interface EmulatorJSGameManager {
   getState?: () => Uint8Array
   setState?: (data: Uint8Array) => void
+  loadState?: (data: Uint8Array) => void
   getSRAM?: () => ArrayBuffer
   pause?: () => void
   play?: () => void

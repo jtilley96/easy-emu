@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { X, Save, FolderOpen, Trash2, Loader2 } from 'lucide-react'
 import { SaveStateInfo } from '../../types'
 import { useEmulatorStore } from '../../store/emulatorStore'
+import { useGamepadNavigation } from '../../hooks/useGamepadNavigation'
 import { pathToLocalImageUrl } from '../../utils/image'
 import { formatDate } from '../../utils/format'
 
@@ -26,13 +27,18 @@ export default function SaveStateModal({
   const [loading, setLoading] = useState(true)
   const [actionSlot, setActionSlot] = useState<number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [focusedIndex, setFocusedIndex] = useState(0)
 
   const { listStates, deleteState } = useEmulatorStore()
 
-  // Load states on open
+  const COLUMNS = 5
+  const TOTAL_SLOTS = 10
+
+  // Load states on open and reset focus
   useEffect(() => {
     if (isOpen) {
       loadStates()
+      setFocusedIndex(0)
     }
   }, [isOpen, gameId])
 
@@ -83,6 +89,79 @@ export default function SaveStateModal({
       console.error('Failed to delete state:', error)
     }
   }
+
+  // Gamepad navigation handlers
+  const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
+    setFocusedIndex(prev => {
+      const row = Math.floor(prev / COLUMNS)
+      const col = prev % COLUMNS
+
+      switch (direction) {
+        case 'up':
+          return row > 0 ? prev - COLUMNS : prev
+        case 'down':
+          return row < Math.floor((TOTAL_SLOTS - 1) / COLUMNS) ? Math.min(prev + COLUMNS, TOTAL_SLOTS - 1) : prev
+        case 'left':
+          return col > 0 ? prev - 1 : prev
+        case 'right':
+          return col < COLUMNS - 1 && prev < TOTAL_SLOTS - 1 ? prev + 1 : prev
+        default:
+          return prev
+      }
+    })
+  }, [])
+
+  const handleConfirm = useCallback(() => {
+    if (!loading && actionSlot === null) {
+      handleSlotClick(focusedIndex)
+    }
+  }, [focusedIndex, loading, actionSlot])
+
+  // Gamepad navigation
+  useGamepadNavigation({
+    enabled: isOpen && !loading,
+    onNavigate: handleNavigate,
+    onConfirm: handleConfirm,
+    onBack: onClose
+  })
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!isOpen || loading) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault()
+          handleNavigate('up')
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          handleNavigate('down')
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          handleNavigate('left')
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          handleNavigate('right')
+          break
+        case 'Enter':
+        case ' ':
+          e.preventDefault()
+          handleConfirm()
+          break
+        case 'Escape':
+          e.preventDefault()
+          onClose()
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, loading, handleNavigate, handleConfirm, onClose])
 
   if (!isOpen) return null
 
@@ -139,6 +218,9 @@ export default function SaveStateModal({
                           ? 'opacity-50 cursor-not-allowed'
                           : 'cursor-pointer'}
                         ${isActive ? 'border-accent ring-2 ring-accent/50' : ''}
+                        ${focusedIndex === i && !isActive
+                          ? 'border-accent scale-105 shadow-lg bp-focus'
+                          : ''}
                       `}
                     >
                       {state?.exists && state.screenshotPath ? (
@@ -224,8 +306,9 @@ export default function SaveStateModal({
         <div className="px-6 py-3 border-t border-surface-700 bg-surface-800/50">
           <p className="text-sm text-surface-400 text-center">
             {mode === 'save'
-              ? 'Click a slot to save your progress. Existing saves will be overwritten.'
+              ? 'Select a slot to save your progress. Existing saves will be overwritten.'
               : 'Select a save slot to restore your progress.'}
+            {' '}Use D-pad to navigate, A to select, B to go back.
           </p>
         </div>
       </div>
