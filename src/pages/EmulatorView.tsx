@@ -21,7 +21,9 @@ import type { EmulatorHotkeyAction } from '../types'
  * - Start: Enter
  * - Select: Shift
  *
- * We try multiple approaches since synthetic events may not work with all emulator input systems
+ * NOTE: Synthetic keyboard events have isTrusted=false which many input systems ignore.
+ * This is a best-effort approach - if it doesn't work, Steam Input should be configured
+ * to send the keys EmulatorJS expects directly (x, z, Enter, Shift, Arrow keys).
  */
 function dispatchKeyToEmulator(key: string, type: 'keydown' | 'keyup' = 'keydown'): void {
   // Map keys to their correct codes and keyCodes
@@ -53,62 +55,32 @@ function dispatchKeyToEmulator(key: string, type: 'keydown' | 'keyup' = 'keydown
     composed: true,
     view: window,
     repeat: false,
-    isTrusted: false, // Can't fake this, but we try anyway
   }
 
-  // Create a custom event that's harder to distinguish from real events
-  const event = new KeyboardEvent(type, eventInit)
-
-  // Try to set the deprecated but sometimes-checked properties
-  try {
-    Object.defineProperty(event, 'keyCode', { value: mapping.keyCode, writable: false })
-    Object.defineProperty(event, 'which', { value: mapping.keyCode, writable: false })
-    Object.defineProperty(event, 'charCode', { value: key.length === 1 ? key.charCodeAt(0) : 0, writable: false })
-  } catch (e) {
-    // Properties might already be defined
-  }
-
-  // Dispatch to multiple targets
-  // 1. Document body (common listener location)
+  // Dispatch to multiple targets - one of them might work
+  window.dispatchEvent(new KeyboardEvent(type, eventInit))
+  document.dispatchEvent(new KeyboardEvent(type, eventInit))
   document.body.dispatchEvent(new KeyboardEvent(type, eventInit))
 
-  // 2. Window (global listener)
-  window.dispatchEvent(new KeyboardEvent(type, eventInit))
-
-  // 3. Document
-  document.dispatchEvent(new KeyboardEvent(type, eventInit))
-
-  // 4. Canvas element (if EmulatorJS is listening there)
   if (canvas) {
     canvas.dispatchEvent(new KeyboardEvent(type, eventInit))
   }
-
-  // 5. The player div
   if (ejsPlayer) {
     ejsPlayer.dispatchEvent(new KeyboardEvent(type, eventInit))
   }
 
-  // 6. Try the EmulatorJS internal API if available
+  // Try EmulatorJS internal API if available
   try {
     const emu = (window as any).EJS_emulator
     if (emu) {
-      // Check for various input methods EmulatorJS might expose
       if (typeof emu.simulateKeyPress === 'function') {
         emu.simulateKeyPress(mapping.keyCode, type === 'keydown')
       }
       if (typeof emu.gameManager?.simulateInput === 'function') {
         emu.gameManager.simulateInput(key, type === 'keydown')
       }
-      // Some versions use Module.ccall for input
-      if (emu.Module?.ccall && type === 'keydown') {
-        try {
-          emu.Module.ccall('simulate_input_char', 'void', ['number'], [mapping.keyCode])
-        } catch (e) {
-          // Function might not exist
-        }
-      }
     }
-  } catch (e) {
+  } catch {
     // EmulatorJS API not available
   }
 
