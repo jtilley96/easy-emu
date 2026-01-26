@@ -95,8 +95,10 @@ export default function EmulatorView() {
   }, [menuModalOpen, saveModalOpen, isLoading])
 
   // Gamepad navigation - Select opens menu
+  // Disable keyboard fallback since EmulatorView has its own keyboard handling
   useGamepadNavigation({
     enabled: !menuModalOpen && !saveModalOpen && !isLoading,
+    enableKeyboardFallback: false,
     onSelect: handleSelectButton
   })
 

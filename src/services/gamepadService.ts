@@ -135,12 +135,8 @@ class GamepadService {
   private connectionListeners: Set<ConnectionListener> = new Set()
   private animationFrameId: number | null = null
   private deadzone: number = 0.15
-  private lastButtonDebugLog: number = 0
-  private debugLogInterval: number = 1000 // Log button presses every 1 second max
 
   private constructor() {
-    console.log('[Gamepad] Service initializing...')
-
     // Listen for gamepad connect/disconnect
     window.addEventListener('gamepadconnected', this.handleGamepadConnected)
     window.addEventListener('gamepaddisconnected', this.handleGamepadDisconnected)
@@ -150,19 +146,6 @@ class GamepadService {
 
     // Start polling
     this.startPolling()
-
-    console.log('[Gamepad] Service initialized. Polling started.')
-
-    // Log gamepad state every 5 seconds for debugging
-    setInterval(() => {
-      const rawGamepads = navigator.getGamepads()
-      const connected = rawGamepads.filter(g => g !== null)
-      console.log('[Gamepad] Status check:', {
-        totalSlots: rawGamepads.length,
-        connectedCount: connected.length,
-        connectedIds: connected.map(g => g?.id)
-      })
-    }, 5000)
   }
 
   private checkExistingGamepads() {
@@ -188,17 +171,6 @@ class GamepadService {
     const state = this.createGamepadState(gamepad)
     this.gamepads.set(gamepad.index, state)
     this.previousButtonStates.set(gamepad.index, gamepad.buttons.map(() => false))
-
-    // Diagnostic logging for Steam Deck debugging
-    console.log('[Gamepad] Connected:', {
-      id: gamepad.id,
-      index: gamepad.index,
-      mapping: gamepad.mapping,
-      buttons: gamepad.buttons.length,
-      axes: gamepad.axes.length,
-      detectedType: state.type
-    })
-
     this.connectionListeners.forEach(listener => listener(state, true))
   }
 
@@ -288,37 +260,12 @@ class GamepadService {
 
   private poll = () => {
     const rawGamepads = navigator.getGamepads()
-    const now = Date.now()
 
     for (const gamepad of rawGamepads) {
       if (gamepad) {
         const previousStates = this.previousButtonStates.get(gamepad.index)
         const state = this.createGamepadState(gamepad)
         this.gamepads.set(gamepad.index, state)
-
-        // Debug logging: show which buttons are actually pressed
-        // This helps identify Steam Input's actual button indices
-        const pressedButtons = gamepad.buttons
-          .map((btn, idx) => btn.pressed ? idx : -1)
-          .filter(idx => idx >= 0)
-
-        const activeAxes = gamepad.axes
-          .map((val, idx) => Math.abs(val) > 0.1 ? `${idx}:${val.toFixed(2)}` : null)
-          .filter(v => v !== null)
-
-        if ((pressedButtons.length > 0 || activeAxes.length > 0) &&
-            now - this.lastButtonDebugLog > this.debugLogInterval) {
-          console.log('[Gamepad] Raw input:', {
-            gamepadId: gamepad.id,
-            gamepadIndex: gamepad.index,
-            detectedType: state.type,
-            pressedButtonIndices: pressedButtons,
-            activeAxes: activeAxes,
-            totalButtons: gamepad.buttons.length,
-            totalAxes: gamepad.axes.length
-          })
-          this.lastButtonDebugLog = now
-        }
 
         // Update previous states for next frame
         if (previousStates) {

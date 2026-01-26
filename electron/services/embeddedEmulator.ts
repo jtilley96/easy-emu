@@ -148,9 +148,7 @@ export function registerEmbeddedHandlers(): void {
   })
 
   ipcMain.handle('embedded:getCorePaths', (_event, platform: string) => {
-    const paths = getCorePaths(platform)
-    console.log('[Embedded] getCorePaths:', platform, paths || 'no core installed')
-    return paths
+    return getCorePaths(platform)
   })
 
   ipcMain.handle('embedded:startSession', async (_event, gameId: string) => {
@@ -166,30 +164,21 @@ export function registerEmbeddedHandlers(): void {
   })
 
   ipcMain.handle('embedded:getGameInfo', (_event, gameId: string) => {
-    const info = getGameInfo(gameId)
-    console.log('[Embedded] getGameInfo:', gameId, info ? { platform: info.platform, title: info.title } : 'not found')
-    return info
+    return getGameInfo(gameId)
   })
 
   ipcMain.handle('embedded:getGameRomData', (_event, gameId: string) => {
-    console.log('[Embedded] getGameRomData:', gameId)
     const game = getGame(gameId)
     if (!game) {
-      console.error('[Embedded] Game not found:', gameId)
       return null
     }
-    console.log('[Embedded] ROM path:', game.path)
     if (!fs.existsSync(game.path)) {
-      console.error('[Embedded] ROM file does not exist:', game.path)
       return null
     }
     try {
-      // Return ROM file as Uint8Array (better IPC serialization than ArrayBuffer)
       const buffer = fs.readFileSync(game.path)
-      console.log('[Embedded] ROM loaded successfully:', buffer.length, 'bytes')
       return new Uint8Array(buffer)
-    } catch (err) {
-      console.error('[Embedded] Failed to read ROM file:', err)
+    } catch {
       return null
     }
   })

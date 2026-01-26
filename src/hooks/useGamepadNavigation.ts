@@ -6,6 +6,7 @@ export type NavigationDirection = 'up' | 'down' | 'left' | 'right'
 
 export interface UseGamepadNavigationOptions {
   enabled?: boolean
+  enableKeyboardFallback?: boolean  // Enable keyboard fallback for Steam Input desktop mode (default true)
   onNavigate?: (direction: NavigationDirection) => void
   onConfirm?: () => void
   onBack?: () => void
@@ -28,6 +29,7 @@ export interface UseGamepadNavigationOptions {
 export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) {
   const {
     enabled = true,
+    enableKeyboardFallback = true,
     onNavigate,
     onConfirm,
     onBack,
@@ -114,10 +116,6 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
     return null
   }, [])
 
-  // Debug logging counter (log every 3 seconds when inputs are detected)
-  const lastDebugLog = useRef<number>(0)
-  const DEBUG_LOG_INTERVAL = 3000 // ms
-
   useEffect(() => {
     if (!enabled) {
       wasEnabled.current = false
@@ -162,24 +160,6 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       else if (dpadLeft || dpadAxes.left) currentDirection = 'left'
       else if (dpadRight || dpadAxes.right) currentDirection = 'right'
       else currentDirection = stickDirection
-
-      // Diagnostic logging (throttled to avoid spam)
-      const leftStick = service.getLeftStick(gamepadIndex)
-      const hasInput = dpadUp || dpadDown || dpadLeft || dpadRight ||
-                       dpadAxes.up || dpadAxes.down || dpadAxes.left || dpadAxes.right ||
-                       Math.abs(leftStick.x) > 0.1 || Math.abs(leftStick.y) > 0.1
-      if (hasInput && now - lastDebugLog.current > DEBUG_LOG_INTERVAL) {
-        console.log('[Navigation] Input detected:', {
-          gamepadIndex,
-          dpadButtons: { up: dpadUp, down: dpadDown, left: dpadLeft, right: dpadRight },
-          dpadAxes: { up: dpadAxes.up, down: dpadAxes.down, left: dpadAxes.left, right: dpadAxes.right },
-          leftStick: { x: leftStick.x.toFixed(2), y: leftStick.y.toFixed(2) },
-          stickDirection,
-          currentDirection,
-          threshold: 0.5
-        })
-        lastDebugLog.current = now
-      }
 
       // Handle navigation with repeat
       const state = navigationState.current
@@ -294,48 +274,74 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
   ])
 
   // Keyboard fallback for Steam Input desktop mode (which sends keyboard events)
-  // This handles Arrow keys, Enter, Escape, and other common mappings
+  // This handles Arrow keys, WASD, and other common Steam Input mappings
+  // Only active when enableKeyboardFallback is true (default)
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled || !enableKeyboardFallback) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const cbs = callbacksRef.current
 
       switch (e.key) {
+        // Arrow keys (primary navigation)
         case 'ArrowUp':
-          e.preventDefault()
-          cbs.onNavigate?.('up')
+        case 'w':
+        case 'W':
+        case 'PageUp':
+          if (cbs.onNavigate) {
+            e.preventDefault()
+            cbs.onNavigate('up')
+          }
           break
         case 'ArrowDown':
-          e.preventDefault()
-          cbs.onNavigate?.('down')
+        case 's':
+        case 'S':
+        case 'PageDown':
+          if (cbs.onNavigate) {
+            e.preventDefault()
+            cbs.onNavigate('down')
+          }
           break
         case 'ArrowLeft':
-          e.preventDefault()
-          cbs.onNavigate?.('left')
+        case 'a':
+        case 'A':
+          if (cbs.onNavigate) {
+            e.preventDefault()
+            cbs.onNavigate('left')
+          }
           break
         case 'ArrowRight':
-          e.preventDefault()
-          cbs.onNavigate?.('right')
+        case 'd':
+        case 'D':
+          if (cbs.onNavigate) {
+            e.preventDefault()
+            cbs.onNavigate('right')
+          }
           break
+        // Confirm (A button)
         case 'Enter':
-        case ' ':  // Space is sometimes mapped to A button
-          e.preventDefault()
-          cbs.onConfirm?.()
+        case ' ':
+          if (cbs.onConfirm) {
+            e.preventDefault()
+            cbs.onConfirm()
+          }
           break
+        // Back (B button)
         case 'Escape':
-        case 'Backspace':  // Backspace is sometimes mapped to B button
-          e.preventDefault()
-          cbs.onBack?.()
+        case 'Backspace':
+          if (cbs.onBack) {
+            e.preventDefault()
+            cbs.onBack()
+          }
           break
+        // Bumpers
         case 'Tab':
-          // Tab + Shift is sometimes mapped to LB, Tab alone to RB
-          if (e.shiftKey) {
+          if (e.shiftKey && cbs.onLeftBumper) {
             e.preventDefault()
-            cbs.onLeftBumper?.()
-          } else {
+            cbs.onLeftBumper()
+          } else if (!e.shiftKey && cbs.onRightBumper) {
             e.preventDefault()
-            cbs.onRightBumper?.()
+            cbs.onRightBumper()
           }
           break
       }
@@ -343,7 +349,7 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [enabled])
+  }, [enabled, enableKeyboardFallback])
 }
 
 export default useGamepadNavigation
