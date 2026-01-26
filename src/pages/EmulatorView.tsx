@@ -341,6 +341,8 @@ export default function EmulatorView() {
       const hasGamepad = getGamepadService().getGamepads().length > 0
       const isSteamInputKey = ['Escape', 'Enter', ' ', 'Backspace'].includes(e.key)
 
+      console.log('[Emulator] Key:', e.key, 'Gamepads:', getGamepadService().getGamepads().length, 'Block:', hasGamepad && isSteamInputKey)
+
       if (hasGamepad && isSteamInputKey) {
         // Don't intercept these keys - let them pass through to the emulator
         // The gamepad polling will handle the actual controller input

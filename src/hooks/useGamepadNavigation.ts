@@ -161,6 +161,14 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       else if (dpadRight || dpadAxes.right) currentDirection = 'right'
       else currentDirection = stickDirection
 
+      // Log navigation direction when active
+      if (currentDirection) {
+        const source = (dpadUp || dpadDown || dpadLeft || dpadRight) ? 'button'
+          : (dpadAxes.up || dpadAxes.down || dpadAxes.left || dpadAxes.right) ? 'axis'
+          : 'stick'
+        console.log('[Nav]', currentDirection, 'from:', source)
+      }
+
       // Handle navigation with repeat
       const state = navigationState.current
 
@@ -283,7 +291,9 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip keyboard fallback if a gamepad is connected (gamepad polling will handle input)
       const service = getGamepadService()
-      if (service.getGamepads().length > 0) {
+      const gamepadCount = service.getGamepads().length
+      console.log('[Nav] Keyboard event:', e.key, 'Gamepads:', gamepadCount, gamepadCount > 0 ? '(skipping)' : '(processing)')
+      if (gamepadCount > 0) {
         return
       }
 

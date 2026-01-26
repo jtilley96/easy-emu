@@ -135,6 +135,7 @@ class GamepadService {
   private connectionListeners: Set<ConnectionListener> = new Set()
   private animationFrameId: number | null = null
   private deadzone: number = 0.15
+  private pollLogCounter: number = 0
 
   private constructor() {
     // Listen for gamepad connect/disconnect
@@ -150,8 +151,17 @@ class GamepadService {
 
   private checkExistingGamepads() {
     const rawGamepads = navigator.getGamepads()
+    console.log('[Gamepad] Checking existing gamepads:', rawGamepads.length, 'slots')
     for (const gamepad of rawGamepads) {
       if (gamepad && gamepad.connected) {
+        console.log('[Gamepad] Found existing:', {
+          id: gamepad.id,
+          index: gamepad.index,
+          mapping: gamepad.mapping,
+          buttons: gamepad.buttons.length,
+          axes: gamepad.axes.length,
+          detectedType: this.detectControllerType(gamepad.id)
+        })
         const state = this.createGamepadState(gamepad)
         this.gamepads.set(gamepad.index, state)
         this.previousButtonStates.set(gamepad.index, gamepad.buttons.map(() => false))
@@ -168,6 +178,14 @@ class GamepadService {
 
   private handleGamepadConnected = (event: GamepadEvent) => {
     const gamepad = event.gamepad
+    console.log('[Gamepad] Connected:', {
+      id: gamepad.id,
+      index: gamepad.index,
+      mapping: gamepad.mapping,
+      buttons: gamepad.buttons.length,
+      axes: gamepad.axes.length,
+      detectedType: this.detectControllerType(gamepad.id)
+    })
     const state = this.createGamepadState(gamepad)
     this.gamepads.set(gamepad.index, state)
     this.previousButtonStates.set(gamepad.index, gamepad.buttons.map(() => false))
@@ -175,6 +193,7 @@ class GamepadService {
   }
 
   private handleGamepadDisconnected = (event: GamepadEvent) => {
+    console.log('[Gamepad] Disconnected:', event.gamepad.id)
     const state = this.gamepads.get(event.gamepad.index)
     if (state) {
       state.connected = false
@@ -260,9 +279,22 @@ class GamepadService {
 
   private poll = () => {
     const rawGamepads = navigator.getGamepads()
+    this.pollLogCounter++
 
     for (const gamepad of rawGamepads) {
       if (gamepad) {
+        // Log D-pad data when active (throttled to every 30 frames)
+        const dpadButtons = [12, 13, 14, 15].map(i => gamepad.buttons[i]?.pressed)
+        const dpadAxes = [gamepad.axes[6], gamepad.axes[7]]
+        const anyDpadActive = dpadButtons.some(b => b) || dpadAxes.some(a => Math.abs(a || 0) > 0.1)
+
+        if (anyDpadActive && this.pollLogCounter % 30 === 0) {
+          console.log('[Gamepad] D-pad:', {
+            buttons: { up: dpadButtons[0], down: dpadButtons[1], left: dpadButtons[2], right: dpadButtons[3] },
+            axes: { axis6: dpadAxes[0]?.toFixed(2), axis7: dpadAxes[1]?.toFixed(2) }
+          })
+        }
+
         const previousStates = this.previousButtonStates.get(gamepad.index)
         const state = this.createGamepadState(gamepad)
         this.gamepads.set(gamepad.index, state)
