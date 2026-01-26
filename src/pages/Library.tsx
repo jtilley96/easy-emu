@@ -1,15 +1,24 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Search, Grid, List, SlidersHorizontal, Star, Clock } from 'lucide-react'
+import { Search, Grid, List, SlidersHorizontal, Star, Clock, ChevronDown } from 'lucide-react'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import GameCard from '../components/GameCard'
 import SearchBar from '../components/SearchBar'
+import OnScreenKeyboard from '../components/OnScreenKeyboard'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 import { useLayoutContext } from '../components/Layout'
 
 type SortBy = 'title' | 'lastPlayed' | 'platform' | 'recentlyAdded'
 type QuickFilter = 'recent' | 'favorites' | null
+
+// Sort options for dropdown
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: 'title', label: 'Title' },
+  { value: 'lastPlayed', label: 'Last Played' },
+  { value: 'platform', label: 'Platform' },
+  { value: 'recentlyAdded', label: 'Recently Added' }
+]
 
 export default function Library() {
   const { games, isScanning, loadLibrary } = useLibraryStore()
@@ -18,7 +27,17 @@ export default function Library() {
   const { isSidebarFocused, setIsSidebarFocused } = useLayoutContext()
   const gridRef = useRef<HTMLDivElement>(null)
   const [focusedIndex, setFocusedIndex] = useState(0)
-  const [isHeaderFocused, setIsHeaderFocused] = useState(false)
+  const [headerFocusIndex, setHeaderFocusIndex] = useState(-1) // -1 = not in header, 0-3 = header items
+
+  // Header items: 0=Search, 1=Platform, 2=Sort, 3=ViewMode
+  const HEADER_ITEM_COUNT = 4
+
+  // On-screen keyboard state
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+
+  // Dropdown state for header items
+  const [openDropdown, setOpenDropdown] = useState<'platform' | 'sort' | null>(null)
+  const [dropdownIndex, setDropdownIndex] = useState(0)
   
   // Prevent A button from firing immediately after navigation or focus change
   const justActivatedRef = useRef(true)
@@ -108,7 +127,7 @@ export default function Library() {
   // Reset focus when games change
   useEffect(() => {
     setFocusedIndex(0)
-    setIsHeaderFocused(false)
+    setHeaderFocusIndex(-1)
   }, [filteredGames.length])
 
   // Calculate columns based on viewport width
@@ -124,33 +143,68 @@ export default function Library() {
     return 2 // default
   }, [])
 
+  // Get platform options for dropdown
+  const platformOptions = useMemo(() => [
+    { value: '', label: 'All Platforms' },
+    ...platforms.map(p => ({ value: p, label: p }))
+  ], [platforms])
+
   // Handle gamepad navigation
   const handleNavigate = useCallback((direction: 'up' | 'down' | 'left' | 'right') => {
-    if (isSidebarFocused || filteredGames.length === 0) return
+    if (isSidebarFocused || keyboardOpen) return
+
+    // If a dropdown is open, navigate within it
+    if (openDropdown) {
+      const options = openDropdown === 'platform' ? platformOptions : SORT_OPTIONS
+      if (direction === 'up') {
+        setDropdownIndex(prev => Math.max(0, prev - 1))
+      } else if (direction === 'down') {
+        setDropdownIndex(prev => Math.min(options.length - 1, prev + 1))
+      }
+      return
+    }
 
     // If header is focused, handle header navigation
-    if (isHeaderFocused) {
+    if (headerFocusIndex >= 0) {
       switch (direction) {
         case 'down':
-          // Move focus to game grid
-          setIsHeaderFocused(false)
-          setFocusedIndex(0)
+          // Move focus to game grid (if there are games)
+          if (filteredGames.length > 0) {
+            setHeaderFocusIndex(-1)
+            setFocusedIndex(0)
+          }
           break
         case 'up':
-        case 'left':
           // Return focus to sidebar
-          setIsHeaderFocused(false)
+          setHeaderFocusIndex(-1)
           setIsSidebarFocused(true)
+          break
+        case 'left':
+          if (headerFocusIndex > 0) {
+            // Move to previous header item
+            setHeaderFocusIndex(headerFocusIndex - 1)
+          } else {
+            // At first header item - return to sidebar
+            setHeaderFocusIndex(-1)
+            setIsSidebarFocused(true)
+          }
+          break
+        case 'right':
+          if (headerFocusIndex < HEADER_ITEM_COUNT - 1) {
+            // Move to next header item
+            setHeaderFocusIndex(headerFocusIndex + 1)
+          }
           break
       }
       return
     }
 
+    if (filteredGames.length === 0) return
+
     // Game grid navigation
     const columns = libraryViewMode === 'grid' ? getColumns() : 1
     const totalGames = filteredGames.length
 
-    let shouldMoveToHeader = false
     let shouldMoveToSidebar = false
 
     const newIndex = (() => {
@@ -161,8 +215,8 @@ export default function Library() {
         switch (direction) {
           case 'up':
             if (focusedIndex === 0) {
-              // At top - move focus to header controls
-              shouldMoveToHeader = true
+              // At top - move focus to header controls (start at search)
+              setHeaderFocusIndex(0)
               return focusedIndex
             }
             newIdx = focusedIndex - 1
@@ -200,8 +254,8 @@ export default function Library() {
             if (focusedIndex - columns >= 0) {
               newIdx = focusedIndex - columns
             } else {
-              // At top row - move focus to header controls
-              shouldMoveToHeader = true
+              // At top row - move focus to header controls (start at search)
+              setHeaderFocusIndex(0)
               return focusedIndex
             }
             break
@@ -221,49 +275,94 @@ export default function Library() {
     })()
 
     // Update state separately to avoid render warnings
-    if (shouldMoveToHeader) {
-      setIsHeaderFocused(true)
-    } else if (shouldMoveToSidebar) {
+    if (shouldMoveToSidebar) {
       setIsSidebarFocused(true)
     } else {
       setFocusedIndex(newIndex)
     }
-  }, [isSidebarFocused, isHeaderFocused, focusedIndex, filteredGames.length, libraryViewMode, getColumns, setIsSidebarFocused])
+  }, [isSidebarFocused, keyboardOpen, openDropdown, platformOptions, headerFocusIndex, focusedIndex, filteredGames.length, libraryViewMode, getColumns, setIsSidebarFocused])
 
   const handleConfirm = useCallback(() => {
     // Ignore if we just activated (prevents double-activation from held A button)
     if (justActivatedRef.current) return
-    if (isSidebarFocused) return
-    if (isHeaderFocused) {
-      // Header controls are focused - could focus search bar or do nothing
-      // For now, just move focus to game grid
-      setIsHeaderFocused(false)
-      setFocusedIndex(0)
+    if (isSidebarFocused || keyboardOpen) return
+
+    // If a dropdown is open, confirm selection
+    if (openDropdown) {
+      if (openDropdown === 'platform') {
+        const selected = platformOptions[dropdownIndex]
+        setLibraryPlatformFilter(selected.value || null)
+      } else if (openDropdown === 'sort') {
+        const selected = SORT_OPTIONS[dropdownIndex]
+        setSortBy(selected.value)
+      }
+      setOpenDropdown(null)
       return
     }
+
+    // Handle header item confirmations
+    if (headerFocusIndex >= 0) {
+      switch (headerFocusIndex) {
+        case 0: // Search - open on-screen keyboard
+          setKeyboardOpen(true)
+          break
+        case 1: // Platform filter - open dropdown
+          {
+            const currentIdx = platformOptions.findIndex(o => o.value === (libraryPlatformFilter || ''))
+            setDropdownIndex(currentIdx >= 0 ? currentIdx : 0)
+            setOpenDropdown('platform')
+          }
+          break
+        case 2: // Sort - open dropdown
+          {
+            const currentIdx = SORT_OPTIONS.findIndex(o => o.value === sortBy)
+            setDropdownIndex(currentIdx >= 0 ? currentIdx : 0)
+            setOpenDropdown('sort')
+          }
+          break
+        case 3: // View mode - toggle
+          setLibraryViewMode(libraryViewMode === 'grid' ? 'list' : 'grid')
+          break
+      }
+      return
+    }
+
     if (!filteredGames[focusedIndex]) return
     navigate(`/game/${filteredGames[focusedIndex].id}`)
-  }, [isSidebarFocused, isHeaderFocused, focusedIndex, filteredGames, navigate])
+  }, [isSidebarFocused, keyboardOpen, openDropdown, headerFocusIndex, focusedIndex, filteredGames, navigate, platformOptions, dropdownIndex, libraryPlatformFilter, setLibraryPlatformFilter, sortBy, setSortBy, libraryViewMode, setLibraryViewMode])
 
   const handleBack = useCallback(() => {
-    if (isSidebarFocused) return
-    if (isHeaderFocused) {
+    if (isSidebarFocused || keyboardOpen) return
+
+    // If dropdown is open, close it
+    if (openDropdown) {
+      setOpenDropdown(null)
+      return
+    }
+
+    if (headerFocusIndex >= 0) {
       // From header, go back to sidebar
-      setIsHeaderFocused(false)
+      setHeaderFocusIndex(-1)
       setIsSidebarFocused(true)
     } else {
       // From game grid, go directly to sidebar
       setIsSidebarFocused(true)
     }
-  }, [isSidebarFocused, isHeaderFocused, setIsSidebarFocused])
+  }, [isSidebarFocused, keyboardOpen, openDropdown, headerFocusIndex, setIsSidebarFocused])
 
-  // Gamepad navigation (only when page is focused)
+  // Gamepad navigation (only when page is focused and keyboard is closed)
   useGamepadNavigation({
-    enabled: !isSidebarFocused,
+    enabled: !isSidebarFocused && !keyboardOpen,
     onNavigate: handleNavigate,
     onConfirm: handleConfirm,
     onBack: handleBack
   })
+
+  // Handle keyboard submit
+  const handleKeyboardSubmit = useCallback((value: string) => {
+    setSearchQuery(value)
+    setKeyboardOpen(false)
+  }, [])
 
   return (
     <div className="flex flex-col h-full">
@@ -282,42 +381,88 @@ export default function Library() {
           </span>
         </div>
 
-        <div className={`flex items-center gap-3 ${isHeaderFocused ? 'ring-2 ring-accent rounded-lg p-1' : ''}`}>
+        <div className="flex items-center gap-3">
           {/* Search */}
-          <SearchBar
-            value={searchQuery}
-            onChange={setSearchQuery}
-            placeholder="Search games..."
-          />
+          <div className={`transition-all ${headerFocusIndex === 0 ? 'ring-2 ring-accent rounded-lg scale-[1.02]' : ''}`}>
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search games..."
+            />
+          </div>
 
           {/* Platform filter */}
-          <select
-            value={libraryPlatformFilter || ''}
-            onChange={e => setLibraryPlatformFilter(e.target.value || null)}
-            className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          >
-            <option value="">All Platforms</option>
-            {platforms.map(platform => (
-              <option key={platform} value={platform}>
-                {platform}
-              </option>
-            ))}
-          </select>
+          <div className="relative">
+            <button
+              onClick={() => {
+                const currentIdx = platformOptions.findIndex(o => o.value === (libraryPlatformFilter || ''))
+                setDropdownIndex(currentIdx >= 0 ? currentIdx : 0)
+                setOpenDropdown(openDropdown === 'platform' ? null : 'platform')
+              }}
+              className={`flex items-center gap-2 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm transition-all ${
+                headerFocusIndex === 1 || openDropdown === 'platform' ? 'ring-2 ring-accent scale-[1.02]' : ''
+              }`}
+            >
+              <span>{libraryPlatformFilter || 'All Platforms'}</span>
+              <ChevronDown size={16} className={`transition-transform ${openDropdown === 'platform' ? 'rotate-180' : ''}`} />
+            </button>
+            {openDropdown === 'platform' && (
+              <div className="absolute top-full left-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-20 min-w-full max-h-64 overflow-auto">
+                {platformOptions.map((option, index) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setLibraryPlatformFilter(option.value || null)
+                      setOpenDropdown(null)
+                    }}
+                    className={`w-full px-3 py-2 text-sm text-left transition-colors ${
+                      index === dropdownIndex ? 'bg-accent text-white' : 'hover:bg-surface-700'
+                    } ${index === 0 ? 'rounded-t-lg' : ''} ${index === platformOptions.length - 1 ? 'rounded-b-lg' : ''}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Sort */}
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as SortBy)}
-            className="bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-          >
-            <option value="title">Sort by Title</option>
-            <option value="lastPlayed">Last Played</option>
-            <option value="platform">Platform</option>
-            <option value="recentlyAdded">Recently Added</option>
-          </select>
+          <div className="relative">
+            <button
+              onClick={() => {
+                const currentIdx = SORT_OPTIONS.findIndex(o => o.value === sortBy)
+                setDropdownIndex(currentIdx >= 0 ? currentIdx : 0)
+                setOpenDropdown(openDropdown === 'sort' ? null : 'sort')
+              }}
+              className={`flex items-center gap-2 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm transition-all ${
+                headerFocusIndex === 2 || openDropdown === 'sort' ? 'ring-2 ring-accent scale-[1.02]' : ''
+              }`}
+            >
+              <span>{SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Title'}</span>
+              <ChevronDown size={16} className={`transition-transform ${openDropdown === 'sort' ? 'rotate-180' : ''}`} />
+            </button>
+            {openDropdown === 'sort' && (
+              <div className="absolute top-full left-0 mt-1 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-20 min-w-full">
+                {SORT_OPTIONS.map((option, index) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setSortBy(option.value)
+                      setOpenDropdown(null)
+                    }}
+                    className={`w-full px-3 py-2 text-sm text-left transition-colors ${
+                      index === dropdownIndex ? 'bg-accent text-white' : 'hover:bg-surface-700'
+                    } ${index === 0 ? 'rounded-t-lg' : ''} ${index === SORT_OPTIONS.length - 1 ? 'rounded-b-lg' : ''}`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* View mode toggle */}
-          <div className="flex border border-surface-700 rounded-lg overflow-hidden">
+          <div className={`flex border border-surface-700 rounded-lg overflow-hidden transition-all ${headerFocusIndex === 3 ? 'ring-2 ring-accent scale-[1.02]' : ''}`}>
             <button
               onClick={() => setLibraryViewMode('grid')}
               className={`p-2 ${libraryViewMode === 'grid' ? 'bg-accent' : 'bg-surface-800 hover:bg-surface-700'}`}
@@ -397,7 +542,7 @@ export default function Library() {
             {filteredGames.map((game, index) => (
               <div
                 key={game.id}
-                className={!isSidebarFocused && index === focusedIndex ? 'ring-2 ring-accent rounded-lg' : ''}
+                className={!isSidebarFocused && headerFocusIndex === -1 && index === focusedIndex ? 'ring-2 ring-accent rounded-lg' : ''}
               >
                 <GameCard game={game} />
               </div>
@@ -408,7 +553,7 @@ export default function Library() {
             {filteredGames.map((game, index) => (
               <div
                 key={game.id}
-                className={!isSidebarFocused && index === focusedIndex ? 'ring-2 ring-accent rounded-lg' : ''}
+                className={!isSidebarFocused && headerFocusIndex === -1 && index === focusedIndex ? 'ring-2 ring-accent rounded-lg' : ''}
               >
                 <GameCard key={game.id} game={game} variant="list" />
               </div>
@@ -416,6 +561,15 @@ export default function Library() {
           </div>
         )}
       </div>
+
+      {/* On-screen keyboard for search */}
+      <OnScreenKeyboard
+        isOpen={keyboardOpen}
+        initialValue={searchQuery}
+        onClose={() => setKeyboardOpen(false)}
+        onSubmit={handleKeyboardSubmit}
+        title="Search Games"
+      />
     </div>
   )
 }
