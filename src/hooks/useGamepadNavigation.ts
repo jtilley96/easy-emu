@@ -292,6 +292,58 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
     isJustPressed
     // Note: callbacks are accessed via callbacksRef to avoid effect restarts
   ])
+
+  // Keyboard fallback for Steam Input desktop mode (which sends keyboard events)
+  // This handles Arrow keys, Enter, Escape, and other common mappings
+  useEffect(() => {
+    if (!enabled) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const cbs = callbacksRef.current
+
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault()
+          cbs.onNavigate?.('up')
+          break
+        case 'ArrowDown':
+          e.preventDefault()
+          cbs.onNavigate?.('down')
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          cbs.onNavigate?.('left')
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          cbs.onNavigate?.('right')
+          break
+        case 'Enter':
+        case ' ':  // Space is sometimes mapped to A button
+          e.preventDefault()
+          cbs.onConfirm?.()
+          break
+        case 'Escape':
+        case 'Backspace':  // Backspace is sometimes mapped to B button
+          e.preventDefault()
+          cbs.onBack?.()
+          break
+        case 'Tab':
+          // Tab + Shift is sometimes mapped to LB, Tab alone to RB
+          if (e.shiftKey) {
+            e.preventDefault()
+            cbs.onLeftBumper?.()
+          } else {
+            e.preventDefault()
+            cbs.onRightBumper?.()
+          }
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [enabled])
 }
 
 export default useGamepadNavigation

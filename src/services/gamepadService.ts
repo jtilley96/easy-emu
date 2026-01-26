@@ -139,6 +139,8 @@ class GamepadService {
   private debugLogInterval: number = 1000 // Log button presses every 1 second max
 
   private constructor() {
+    console.log('[Gamepad] Service initializing...')
+
     // Listen for gamepad connect/disconnect
     window.addEventListener('gamepadconnected', this.handleGamepadConnected)
     window.addEventListener('gamepaddisconnected', this.handleGamepadDisconnected)
@@ -148,6 +150,19 @@ class GamepadService {
 
     // Start polling
     this.startPolling()
+
+    console.log('[Gamepad] Service initialized. Polling started.')
+
+    // Log gamepad state every 5 seconds for debugging
+    setInterval(() => {
+      const rawGamepads = navigator.getGamepads()
+      const connected = rawGamepads.filter(g => g !== null)
+      console.log('[Gamepad] Status check:', {
+        totalSlots: rawGamepads.length,
+        connectedCount: connected.length,
+        connectedIds: connected.map(g => g?.id)
+      })
+    }, 5000)
   }
 
   private checkExistingGamepads() {
