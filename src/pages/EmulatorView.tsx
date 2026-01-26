@@ -9,6 +9,7 @@ import { useEmulatorStore } from '../store/emulatorStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
+import { getGamepadService } from '../services/gamepadService'
 import type { EmulatorHotkeyAction } from '../types'
 
 export default function EmulatorView() {
@@ -335,7 +336,18 @@ export default function EmulatorView() {
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Always handle Escape to exit
+      // When a gamepad is connected, Steam Input may send keyboard events for controller buttons
+      // Skip these to prevent double-input (e.g., B button sending Escape, A button sending Enter)
+      const hasGamepad = getGamepadService().getGamepads().length > 0
+      const isSteamInputKey = ['Escape', 'Enter', ' ', 'Backspace'].includes(e.key)
+
+      if (hasGamepad && isSteamInputKey) {
+        // Don't intercept these keys - let them pass through to the emulator
+        // The gamepad polling will handle the actual controller input
+        return
+      }
+
+      // Handle Escape to exit (only when no gamepad connected)
       if (e.key === 'Escape') {
         e.preventDefault()
         handleExit()

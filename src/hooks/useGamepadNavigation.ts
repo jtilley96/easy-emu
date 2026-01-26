@@ -275,11 +275,18 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
 
   // Keyboard fallback for Steam Input desktop mode (which sends keyboard events)
   // This handles Arrow keys, WASD, and other common Steam Input mappings
-  // Only active when enableKeyboardFallback is true (default)
+  // Only active when enableKeyboardFallback is true (default) AND no gamepad is connected
+  // This prevents double-input when Steam Input presents both a virtual gamepad AND keyboard events
   useEffect(() => {
     if (!enabled || !enableKeyboardFallback) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip keyboard fallback if a gamepad is connected (gamepad polling will handle input)
+      const service = getGamepadService()
+      if (service.getGamepads().length > 0) {
+        return
+      }
+
       const cbs = callbacksRef.current
 
       switch (e.key) {
