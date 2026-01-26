@@ -196,6 +196,41 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           cacheManager: false
         }
 
+        // Set default keyboard controls that match Steam Input's keyboard mode
+        // Steam Input sends: Enter (A), Escape (B), Space (Start), Tab (Select), Arrow keys (D-pad)
+        // We only set these if no gamepad is detected, so normal keyboard users still get standard controls
+        if (rawConnected.length === 0) {
+          console.log('[EmulatorCanvas] No gamepad detected - configuring Steam Input keyboard mappings')
+          // EmulatorJS uses these keys for player 1 keyboard controls
+          // Format: { player: { button: keyCode } }
+          // Note: EmulatorJS may read from localStorage for these
+          const steamInputKeyMap = {
+            0: { // Player 1
+              0: 13,  // A button = Enter (keyCode 13)
+              1: 27,  // B button = Escape (keyCode 27)
+              2: 32,  // Start = Space (keyCode 32)
+              3: 9,   // Select = Tab (keyCode 9)
+              4: 38,  // Up = ArrowUp (keyCode 38)
+              5: 40,  // Down = ArrowDown (keyCode 40)
+              6: 37,  // Left = ArrowLeft (keyCode 37)
+              7: 39,  // Right = ArrowRight (keyCode 39)
+              // Shoulder buttons - common Steam Input mappings
+              8: 81,  // L = Q (keyCode 81)
+              9: 69,  // R = E (keyCode 69)
+            }
+          }
+          try {
+            // Try setting via EJS_defaultControls if supported
+            ;(window as any).EJS_defaultControls = steamInputKeyMap
+            // Also try localStorage which EmulatorJS might read
+            localStorage.setItem('controls', JSON.stringify(steamInputKeyMap))
+            localStorage.setItem('EJS_controls', JSON.stringify(steamInputKeyMap))
+            localStorage.setItem('ejs-controls', JSON.stringify(steamInputKeyMap))
+          } catch (e) {
+            console.warn('[EmulatorCanvas] Failed to set Steam Input keyboard mappings:', e)
+          }
+        }
+
         // Set up game start callback
         window.EJS_onGameStart = () => {
           if (mountedRef.current) {

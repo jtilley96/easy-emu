@@ -13,24 +13,106 @@ import { getGamepadService } from '../services/gamepadService'
 import type { EmulatorHotkeyAction } from '../types'
 
 /**
- * Dispatch a synthetic keyboard event to EmulatorJS
- * This is used to translate Steam Input keyboard events to EmulatorJS expected keys
+ * Simulate a keyboard button press for EmulatorJS
+ * EmulatorJS default keyboard controls:
+ * - D-pad: Arrow keys
+ * - A button: x
+ * - B button: z
+ * - Start: Enter
+ * - Select: Shift
+ *
+ * We try multiple approaches since synthetic events may not work with all emulator input systems
  */
 function dispatchKeyToEmulator(key: string, type: 'keydown' | 'keyup' = 'keydown'): void {
-  const event = new KeyboardEvent(type, {
-    key,
-    code: `Key${key.toUpperCase()}`,
-    keyCode: key.charCodeAt(0),
-    which: key.charCodeAt(0),
-    bubbles: true,
-    cancelable: true
-  })
-  // Dispatch to the EmulatorJS player element if it exists, otherwise document
-  const ejsPlayer = document.getElementById('ejs-player')
-  if (ejsPlayer) {
-    ejsPlayer.dispatchEvent(event)
+  // Map keys to their correct codes and keyCodes
+  const keyMap: Record<string, { code: string; keyCode: number }> = {
+    'x': { code: 'KeyX', keyCode: 88 },
+    'z': { code: 'KeyZ', keyCode: 90 },
+    'Enter': { code: 'Enter', keyCode: 13 },
+    'Shift': { code: 'ShiftLeft', keyCode: 16 },
   }
-  document.dispatchEvent(event)
+
+  const mapping = keyMap[key] || { code: `Key${key.toUpperCase()}`, keyCode: key.charCodeAt(0) }
+
+  // Ensure the EmulatorJS player has focus first
+  const ejsPlayer = document.getElementById('ejs-player')
+  const canvas = ejsPlayer?.querySelector('canvas') as HTMLCanvasElement
+  if (canvas) {
+    canvas.focus()
+  }
+
+  // Create event with all properties EmulatorJS might check
+  const eventInit: KeyboardEventInit = {
+    key,
+    code: mapping.code,
+    keyCode: mapping.keyCode,
+    which: mapping.keyCode,
+    charCode: key.length === 1 ? key.charCodeAt(0) : 0,
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    view: window,
+    repeat: false,
+    isTrusted: false, // Can't fake this, but we try anyway
+  }
+
+  // Create a custom event that's harder to distinguish from real events
+  const event = new KeyboardEvent(type, eventInit)
+
+  // Try to set the deprecated but sometimes-checked properties
+  try {
+    Object.defineProperty(event, 'keyCode', { value: mapping.keyCode, writable: false })
+    Object.defineProperty(event, 'which', { value: mapping.keyCode, writable: false })
+    Object.defineProperty(event, 'charCode', { value: key.length === 1 ? key.charCodeAt(0) : 0, writable: false })
+  } catch (e) {
+    // Properties might already be defined
+  }
+
+  // Dispatch to multiple targets
+  // 1. Document body (common listener location)
+  document.body.dispatchEvent(new KeyboardEvent(type, eventInit))
+
+  // 2. Window (global listener)
+  window.dispatchEvent(new KeyboardEvent(type, eventInit))
+
+  // 3. Document
+  document.dispatchEvent(new KeyboardEvent(type, eventInit))
+
+  // 4. Canvas element (if EmulatorJS is listening there)
+  if (canvas) {
+    canvas.dispatchEvent(new KeyboardEvent(type, eventInit))
+  }
+
+  // 5. The player div
+  if (ejsPlayer) {
+    ejsPlayer.dispatchEvent(new KeyboardEvent(type, eventInit))
+  }
+
+  // 6. Try the EmulatorJS internal API if available
+  try {
+    const emu = (window as any).EJS_emulator
+    if (emu) {
+      // Check for various input methods EmulatorJS might expose
+      if (typeof emu.simulateKeyPress === 'function') {
+        emu.simulateKeyPress(mapping.keyCode, type === 'keydown')
+      }
+      if (typeof emu.gameManager?.simulateInput === 'function') {
+        emu.gameManager.simulateInput(key, type === 'keydown')
+      }
+      // Some versions use Module.ccall for input
+      if (emu.Module?.ccall && type === 'keydown') {
+        try {
+          emu.Module.ccall('simulate_input_char', 'void', ['number'], [mapping.keyCode])
+        } catch (e) {
+          // Function might not exist
+        }
+      }
+    }
+  } catch (e) {
+    // EmulatorJS API not available
+  }
+
+  console.log(`[EmulatorView] Dispatched ${type} '${key}' (keyCode: ${mapping.keyCode})`)
 }
 
 export default function EmulatorView() {
