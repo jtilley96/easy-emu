@@ -45,3 +45,6 @@ public/systems/
 # AI
 .claude
 claude-plan.md
+
+# Local release notes (not tracked)
+RELEASE_NOTES.local.md

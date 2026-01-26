@@ -126,7 +126,7 @@ function getPlatformAsset(assets: GitHubAsset[]): GitHubAsset | null {
       /EasyEmu.*\.exe$/i
     ],
     darwin: [
-      arch === 'arm64' ? /EasyEmu.*arm64.*\.dmg$/i : /EasyEmu.*(?!arm64).*\.dmg$/i,
+      arch === 'arm64' ? /EasyEmu.*arm64.*\.dmg$/i : /EasyEmu(?!.*arm64).*\.dmg$/i,
       /EasyEmu.*\.dmg$/i
     ],
     linux: [
@@ -342,15 +342,22 @@ export async function downloadUpdate(downloadUrl: string, assetName: string, ass
       })
     })
 
-    // Verify file exists
+    // Verify file exists and size matches expected
     if (!fs.existsSync(destPath)) {
       throw new Error('Download verification failed: file not found')
+    }
+
+    const actualFileSize = fs.statSync(destPath).size
+    if (actualFileSize !== assetSize) {
+      throw new Error(
+        `Download verification failed: file size mismatch. Expected ${assetSize} bytes, got ${actualFileSize} bytes. The download may be incomplete.`
+      )
     }
 
     sendProgress({
       status: 'complete',
       progress: 100,
-      downloadedBytes: assetSize,
+      downloadedBytes: actualFileSize,
       totalBytes: assetSize,
       downloadPath: destPath
     })

@@ -1918,8 +1918,8 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
             </button>
           )}
 
-          {/* Update available - show Download button */}
-          {updateInfo?.hasUpdate && updateProgress.status === 'idle' && (
+          {/* Update available - show Download button (or Retry if error) */}
+          {updateInfo?.hasUpdate && (updateProgress.status === 'idle' || updateProgress.status === 'error') && (
             <button
               data-focus-row={2}
               data-focus-col={0}
@@ -1931,7 +1931,7 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
               }`}
             >
               <Download size={16} className="inline mr-2" />
-              Download Update
+              {updateProgress.status === 'error' ? 'Retry Download' : 'Download Update'}
             </button>
           )}
 
