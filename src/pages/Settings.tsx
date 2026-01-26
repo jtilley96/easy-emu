@@ -216,7 +216,16 @@ export default function Settings() {
   return (
     <div className="flex h-full">
       {/* Settings Navigation */}
-      <nav className="w-56 bg-surface-900 border-r border-surface-800 p-4">
+      <nav className={`w-56 bg-surface-900 border-r p-4 transition-all relative ${
+        !isSidebarFocused && isSectionListFocused
+          ? 'border-accent/50'
+          : 'border-surface-800'
+      }`}>
+        {/* Focus indicator bar */}
+        <div className={`absolute left-0 top-0 bottom-0 w-1 bg-accent transition-opacity ${
+          !isSidebarFocused && isSectionListFocused ? 'opacity-100' : 'opacity-0'
+        }`} />
+
         <h2 className="text-lg font-semibold mb-4">Settings</h2>
         <ul className="space-y-1">
           {NAV_ITEMS.map((item, index) => {
@@ -228,7 +237,9 @@ export default function Settings() {
                   onClick={() => navigate(`/settings/${item.id}`)}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all ${
                     isActive
-                      ? 'bg-accent text-white'
+                      ? isFocused
+                        ? 'bg-accent text-white ring-2 ring-white/70 scale-[1.02] shadow-lg'
+                        : 'bg-accent text-white'
                       : isFocused
                       ? 'bg-surface-800 text-white scale-[1.02] shadow-lg ring-2 ring-accent'
                       : 'hover:bg-surface-800 text-surface-300'

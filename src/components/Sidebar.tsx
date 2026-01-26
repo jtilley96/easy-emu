@@ -25,15 +25,18 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/settings', icon: <Settings size={20} />, label: 'Settings' }
 ]
 
-function NavItemComponent({ item, isActive, isFocused }: { item: NavItem; isActive: boolean; isFocused: boolean }) {
+function NavItemComponent({ item, isActive, isFocused, sidebarFocused }: { item: NavItem; isActive: boolean; isFocused: boolean; sidebarFocused: boolean }) {
+  const showFocusRing = isFocused && sidebarFocused
   return (
     <NavLink
       to={item.to}
       className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all ${
         isActive
-          ? 'bg-accent text-white'
-          : isFocused
-          ? 'bg-surface-800 text-white scale-[1.02] shadow-lg bp-focus'
+          ? showFocusRing
+            ? 'bg-accent text-white ring-2 ring-white/70 scale-[1.02] shadow-lg'
+            : 'bg-accent text-white'
+          : showFocusRing
+          ? 'bg-surface-800 text-white ring-2 ring-accent scale-[1.02] shadow-lg'
           : 'text-surface-300 hover:bg-surface-800 hover:text-surface-100'
       }`}
     >
@@ -132,7 +135,16 @@ export default function Sidebar() {
   })
 
   return (
-    <aside className="w-56 bg-surface-950 border-r border-surface-800 flex flex-col">
+    <aside className={`w-56 bg-surface-950 border-r flex flex-col transition-all relative ${
+      isSidebarFocused
+        ? 'border-accent/50'
+        : 'border-surface-800'
+    }`}>
+      {/* Focus indicator bar */}
+      <div className={`absolute left-0 top-0 bottom-0 w-1 bg-accent transition-opacity ${
+        isSidebarFocused ? 'opacity-100' : 'opacity-0'
+      }`} />
+
       {/* Logo */}
       <div className="p-4 mb-2">
         <div className="flex items-center gap-3">
@@ -152,6 +164,7 @@ export default function Sidebar() {
               item={item}
               isActive={isItemActive(item)}
               isFocused={focusedIndex === index}
+              sidebarFocused={isSidebarFocused}
             />
           )
         })}
@@ -170,6 +183,7 @@ export default function Sidebar() {
               item={item}
               isActive={isItemActive(item)}
               isFocused={focusedIndex === actualIndex}
+              sidebarFocused={isSidebarFocused}
             />
           )
         })}
@@ -185,6 +199,7 @@ export default function Sidebar() {
               item={item}
               isActive={isItemActive(item)}
               isFocused={focusedIndex === actualIndex}
+              sidebarFocused={isSidebarFocused}
             />
           )
         })}
