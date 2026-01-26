@@ -149,25 +149,30 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       const dpadLeft = service.isActionPressed(gamepadIndex, 'dpadLeft')
       const dpadRight = service.isActionPressed(gamepadIndex, 'dpadRight')
 
+      // Also check D-pad via axes (Linux/Steam Deck may report D-pad this way)
+      const dpadAxes = service.getDpadFromAxes(gamepadIndex)
+
       // Check stick
       const stickDirection = checkStickDirection(gamepadIndex)
 
-      // Determine current direction (D-pad takes priority)
+      // Determine current direction (D-pad buttons first, then D-pad axes, then stick)
       let currentDirection: NavigationDirection | null = null
-      if (dpadUp) currentDirection = 'up'
-      else if (dpadDown) currentDirection = 'down'
-      else if (dpadLeft) currentDirection = 'left'
-      else if (dpadRight) currentDirection = 'right'
+      if (dpadUp || dpadAxes.up) currentDirection = 'up'
+      else if (dpadDown || dpadAxes.down) currentDirection = 'down'
+      else if (dpadLeft || dpadAxes.left) currentDirection = 'left'
+      else if (dpadRight || dpadAxes.right) currentDirection = 'right'
       else currentDirection = stickDirection
 
       // Diagnostic logging (throttled to avoid spam)
       const leftStick = service.getLeftStick(gamepadIndex)
       const hasInput = dpadUp || dpadDown || dpadLeft || dpadRight ||
+                       dpadAxes.up || dpadAxes.down || dpadAxes.left || dpadAxes.right ||
                        Math.abs(leftStick.x) > 0.1 || Math.abs(leftStick.y) > 0.1
       if (hasInput && now - lastDebugLog.current > DEBUG_LOG_INTERVAL) {
         console.log('[Navigation] Input detected:', {
           gamepadIndex,
-          dpad: { up: dpadUp, down: dpadDown, left: dpadLeft, right: dpadRight },
+          dpadButtons: { up: dpadUp, down: dpadDown, left: dpadLeft, right: dpadRight },
+          dpadAxes: { up: dpadAxes.up, down: dpadAxes.down, left: dpadAxes.left, right: dpadAxes.right },
           leftStick: { x: leftStick.x.toFixed(2), y: leftStick.y.toFixed(2) },
           stickDirection,
           currentDirection,

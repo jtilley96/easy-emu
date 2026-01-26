@@ -135,6 +135,8 @@ class GamepadService {
   private connectionListeners: Set<ConnectionListener> = new Set()
   private animationFrameId: number | null = null
   private deadzone: number = 0.15
+  private lastButtonDebugLog: number = 0
+  private debugLogInterval: number = 1000 // Log button presses every 1 second max
 
   private constructor() {
     // Listen for gamepad connect/disconnect
@@ -198,9 +200,15 @@ class GamepadService {
   private detectControllerType(id: string): 'xbox' | 'playstation' | 'nintendo' | 'steamdeck' | 'generic' {
     const lowerId = id.toLowerCase()
 
-    // Steam Deck detection (check first as it may also contain other keywords)
+    // Steam Deck / Steam Input detection (check first as it may also contain other keywords)
+    // Steam Input can present controllers with various IDs
     if (lowerId.includes('steam') || lowerId.includes('deck') || lowerId.includes('valve')) {
       return 'steamdeck'
+    }
+    // Steam Input virtual controller often shows as "Microsoft Xbox 360" or similar
+    // Check for specific Steam Input patterns
+    if (lowerId.includes('virtual') && lowerId.includes('controller')) {
+      return 'steamdeck'  // Treat Steam virtual controllers as Steam Deck layout
     }
     if (lowerId.includes('xbox') || lowerId.includes('xinput') || lowerId.includes('microsoft')) {
       return 'xbox'
@@ -265,12 +273,37 @@ class GamepadService {
 
   private poll = () => {
     const rawGamepads = navigator.getGamepads()
+    const now = Date.now()
 
     for (const gamepad of rawGamepads) {
       if (gamepad) {
         const previousStates = this.previousButtonStates.get(gamepad.index)
         const state = this.createGamepadState(gamepad)
         this.gamepads.set(gamepad.index, state)
+
+        // Debug logging: show which buttons are actually pressed
+        // This helps identify Steam Input's actual button indices
+        const pressedButtons = gamepad.buttons
+          .map((btn, idx) => btn.pressed ? idx : -1)
+          .filter(idx => idx >= 0)
+
+        const activeAxes = gamepad.axes
+          .map((val, idx) => Math.abs(val) > 0.1 ? `${idx}:${val.toFixed(2)}` : null)
+          .filter(v => v !== null)
+
+        if ((pressedButtons.length > 0 || activeAxes.length > 0) &&
+            now - this.lastButtonDebugLog > this.debugLogInterval) {
+          console.log('[Gamepad] Raw input:', {
+            gamepadId: gamepad.id,
+            gamepadIndex: gamepad.index,
+            detectedType: state.type,
+            pressedButtonIndices: pressedButtons,
+            activeAxes: activeAxes,
+            totalButtons: gamepad.buttons.length,
+            totalAxes: gamepad.axes.length
+          })
+          this.lastButtonDebugLog = now
+        }
 
         // Update previous states for next frame
         if (previousStates) {
@@ -378,16 +411,45 @@ class GamepadService {
     }
   }
 
+  // Check D-pad using axes (some controllers report D-pad as axes 6/7 or 9)
+  getDpadFromAxes(gamepadIndex: number): { up: boolean; down: boolean; left: boolean; right: boolean } {
+    const gamepad = this.gamepads.get(gamepadIndex)
+    if (!gamepad) return { up: false, down: false, left: false, right: false }
+
+    // Some Linux drivers report D-pad on axes 6 (horizontal) and 7 (vertical)
+    // Values are typically -1, 0, or 1
+    const dpadThreshold = 0.5
+    const axis6 = gamepad.axes[6] ?? 0
+    const axis7 = gamepad.axes[7] ?? 0
+
+    // Note: Some controllers use axis 9 as a hat switch, but axes 6/7 are more common
+    // for D-pad on Linux. The raw input logging will show if other axes are being used.
+
+    return {
+      up: axis7 < -dpadThreshold,
+      down: axis7 > dpadThreshold,
+      left: axis6 < -dpadThreshold,
+      right: axis6 > dpadThreshold
+    }
+  }
+
   // Get navigation direction from D-pad or left stick
   getNavigationDirection(gamepadIndex: number): 'up' | 'down' | 'left' | 'right' | null {
     const gamepad = this.gamepads.get(gamepadIndex)
     if (!gamepad) return null
 
-    // Check D-pad first (higher priority)
+    // Check D-pad buttons first (higher priority)
     if (this.isActionJustPressed(gamepadIndex, 'dpadUp')) return 'up'
     if (this.isActionJustPressed(gamepadIndex, 'dpadDown')) return 'down'
     if (this.isActionJustPressed(gamepadIndex, 'dpadLeft')) return 'left'
     if (this.isActionJustPressed(gamepadIndex, 'dpadRight')) return 'right'
+
+    // Check D-pad via axes (Linux/Steam Deck may report D-pad this way)
+    const dpadAxes = this.getDpadFromAxes(gamepadIndex)
+    if (dpadAxes.up) return 'up'
+    if (dpadAxes.down) return 'down'
+    if (dpadAxes.left) return 'left'
+    if (dpadAxes.right) return 'right'
 
     // Check left stick
     const leftStick = this.getLeftStick(gamepadIndex)
