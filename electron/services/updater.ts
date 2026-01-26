@@ -80,6 +80,43 @@ function parseVersion(version: string): {
 }
 
 /**
+ * Compare prerelease identifiers following SemVer rules
+ * Each identifier is compared numerically if both are numeric, otherwise lexicographically
+ */
+function comparePrerelease(a: string, b: string): number {
+  const partsA = a.split('.')
+  const partsB = b.split('.')
+
+  const maxLength = Math.max(partsA.length, partsB.length)
+
+  for (let i = 0; i < maxLength; i++) {
+    const partA = partsA[i]
+    const partB = partsB[i]
+
+    // If one is missing, the shorter one is less
+    if (partA === undefined) return -1
+    if (partB === undefined) return 1
+
+    // Try to parse as numbers
+    const numA = Number(partA)
+    const numB = Number(partB)
+
+    // If both are numeric, compare as numbers
+    if (!isNaN(numA) && !isNaN(numB)) {
+      if (numA !== numB) return numA - numB
+      continue
+    }
+
+    // Otherwise compare as strings
+    if (partA !== partB) {
+      return partA < partB ? -1 : 1
+    }
+  }
+
+  return 0
+}
+
+/**
  * Compare two version strings
  * Returns: negative if a < b, 0 if equal, positive if a > b
  */
@@ -106,7 +143,8 @@ function compareVersions(a: string, b: string): number {
     const orderA = getOrder(va.prerelease)
     const orderB = getOrder(vb.prerelease)
     if (orderA !== orderB) return orderA - orderB
-    return va.prerelease.localeCompare(vb.prerelease)
+    // Use proper prerelease comparison for same type
+    return comparePrerelease(va.prerelease, vb.prerelease)
   }
 
   return 0
@@ -320,7 +358,10 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
 
 export async function downloadUpdate(downloadUrl: string, assetName: string, assetSize: number): Promise<string> {
   ensureDownloadsDirectory()
-  const destPath = path.join(getDownloadsPath(), assetName)
+  // Sanitize filename to prevent path traversal attacks
+  // path.basename extracts only the filename, removing any directory components
+  const sanitizedFileName = path.basename(assetName)
+  const destPath = path.join(getDownloadsPath(), sanitizedFileName)
   currentDownloadPath = destPath
 
   try {

@@ -1895,10 +1895,33 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
           {updateProgress.status === 'checking' && (
             <button
               disabled
-              className="px-4 py-2 rounded-lg bg-surface-700 text-surface-400 flex items-center gap-2"
+              data-focus-row={2}
+              data-focus-col={0}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                isCellFocused(2)
+                  ? 'bg-surface-600 text-surface-300 ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 text-surface-400'
+              }`}
             >
               <Loader2 size={16} className="animate-spin" />
               Checking...
+            </button>
+          )}
+
+          {/* Downloading state */}
+          {updateProgress.status === 'downloading' && (
+            <button
+              disabled
+              data-focus-row={2}
+              data-focus-col={0}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                isCellFocused(2)
+                  ? 'bg-surface-600 text-surface-300 ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 text-surface-400'
+              }`}
+            >
+              <Loader2 size={16} className="animate-spin" />
+              Downloading... {updateProgress.progress}%
             </button>
           )}
 
