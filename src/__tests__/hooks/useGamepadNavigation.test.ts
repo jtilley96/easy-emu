@@ -3,7 +3,6 @@ import { renderHook, act } from '@testing-library/react'
 import { useInputStore } from '../../store/inputStore'
 import {
   createMockGamepad,
-  createGamepadWithStickInput,
   setGamepad,
   clearGamepads,
   pressButton,

@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, waitFor, act } from '@testing-library/react'
 import { useEmulatorStore } from '../../../store/emulatorStore'
 import { useInputStore } from '../../../store/inputStore'
-import { flushAnimationFrames } from '../../../../vitest.setup'
 import type { GamepadState } from '../../../services/gamepadService'
+// Import types from main types file to avoid declaration conflicts
+import '../../../lib/emulatorjs/types'
 
 // Mock the EmulatorJS globals and electronAPI
 const mockElectronAPIEmbedded = {
@@ -12,39 +13,46 @@ const mockElectronAPIEmbedded = {
   getGameRomData: vi.fn()
 }
 
-// Extend window for EmulatorJS globals
-declare global {
-  interface Window {
-    EJS_gameUrl?: string
-    EJS_core?: string
-    EJS_pathtodata?: string
-    EJS_player?: string
-    EJS_startOnLoaded?: boolean
-    EJS_volume?: number
-    EJS_color?: string
-    EJS_gameID?: string
-    EJS_Buttons?: Record<string, boolean>
-    EJS_onGameStart?: () => void
-    EJS_emulator?: any
-    EJS_STORAGE?: any
-  }
-}
-
 describe('EmulatorCanvas', () => {
   let EmulatorCanvas: typeof import('../../../components/emulator/EmulatorCanvas').default
+
+  // Mock API functions that can be checked in tests
+  const mockSavesAPI = {
+    loadSRAM: vi.fn().mockResolvedValue(null),
+    saveSRAM: vi.fn().mockResolvedValue(undefined),
+    saveState: vi.fn().mockResolvedValue(undefined),
+    loadState: vi.fn().mockResolvedValue(null),
+    deleteState: vi.fn().mockResolvedValue(undefined),
+    listStates: vi.fn().mockResolvedValue([])
+  }
 
   beforeEach(async () => {
     vi.resetModules()
 
-    // Setup mock electronAPI
-    Object.defineProperty(window, 'electronAPI', {
-      value: {
-        ...window.electronAPI,
-        embedded: mockElectronAPIEmbedded
-      },
-      writable: true,
-      configurable: true
-    })
+    // Mock URL.createObjectURL and URL.revokeObjectURL
+    global.URL.createObjectURL = vi.fn(() => 'blob:test-url')
+    global.URL.revokeObjectURL = vi.fn()
+
+    // Reset mock functions
+    mockElectronAPIEmbedded.getGameInfo.mockReset()
+    mockElectronAPIEmbedded.getCorePaths.mockReset()
+    mockElectronAPIEmbedded.getGameRomData.mockReset()
+    Object.values(mockSavesAPI).forEach(fn => fn.mockReset())
+    mockSavesAPI.loadSRAM.mockResolvedValue(null)
+    mockSavesAPI.saveSRAM.mockResolvedValue(undefined)
+
+    // Setup mock electronAPI - use assignment since property is writable
+    ;(window as any).electronAPI = {
+      ...window.electronAPI,
+      embedded: mockElectronAPIEmbedded,
+      saves: mockSavesAPI,
+      cores: {
+        getInstalled: vi.fn().mockResolvedValue([]),
+        getAvailable: vi.fn().mockResolvedValue([]),
+        download: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined)
+      }
+    }
 
     // Reset EmulatorJS globals
     delete window.EJS_gameUrl
@@ -53,10 +61,18 @@ describe('EmulatorCanvas', () => {
     delete window.EJS_emulator
     delete window.EJS_onGameStart
 
-    // Reset stores
+    // Reset stores to default state
     useEmulatorStore.setState({
-      loadSRAM: vi.fn().mockResolvedValue(null),
-      saveSRAM: vi.fn().mockResolvedValue(undefined)
+      installedCores: [],
+      availableCores: [],
+      downloadingCores: {},
+      isPlaying: false,
+      currentGameId: null,
+      sessionStartTime: null,
+      isPaused: false,
+      volume: 1.0,
+      isMuted: false,
+      preferEmbedded: true
     })
 
     useInputStore.setState({
@@ -327,8 +343,7 @@ describe('EmulatorCanvas', () => {
   describe('SRAM loading', () => {
     it('loads SRAM data if available', async () => {
       const sramData = new ArrayBuffer(8192)
-      const loadSRAM = vi.fn().mockResolvedValue(sramData)
-      useEmulatorStore.setState({ loadSRAM })
+      mockSavesAPI.loadSRAM.mockResolvedValue(sramData)
 
       mockElectronAPIEmbedded.getGameInfo.mockResolvedValue({
         id: 'game-1',
@@ -343,7 +358,7 @@ describe('EmulatorCanvas', () => {
       render(<EmulatorCanvas gameId="game-1" />)
 
       await waitFor(() => {
-        expect(loadSRAM).toHaveBeenCalledWith('game-1')
+        expect(mockSavesAPI.loadSRAM).toHaveBeenCalledWith('game-1')
       })
     })
   })

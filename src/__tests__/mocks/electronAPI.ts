@@ -60,7 +60,7 @@ export function installMockElectronAPI() {
  * Get the current mock electronAPI
  */
 export function getMockElectronAPI() {
-  return window.electronAPI as ReturnType<typeof createMockElectronAPI>
+  return window.electronAPI as unknown as ReturnType<typeof createMockElectronAPI>
 }
 
 /**

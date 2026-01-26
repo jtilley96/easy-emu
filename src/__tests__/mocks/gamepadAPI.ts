@@ -85,18 +85,25 @@ export function createMockGamepad(overrides: Partial<{
 
 /**
  * Create mock gamepads array (4 slots, matching browser API)
+ * This is a singleton array that's used throughout tests
  */
-let mockGamepads: (Gamepad | null)[] = [null, null, null, null]
+const mockGamepads: (Gamepad | null)[] = [null, null, null, null]
 
 /**
  * Install mock navigator.getGamepads
+ * Called automatically on import, but can be called again to reset
  */
 export function installMockGamepadAPI() {
-  mockGamepads = [null, null, null, null]
+  // Clear the array
+  for (let i = 0; i < 4; i++) {
+    mockGamepads[i] = null
+  }
 
-  vi.stubGlobal('navigator', {
-    ...navigator,
-    getGamepads: vi.fn(() => [...mockGamepads])
+  // Override navigator.getGamepads to return our mockGamepads
+  Object.defineProperty(navigator, 'getGamepads', {
+    value: vi.fn(() => [...mockGamepads]),
+    writable: true,
+    configurable: true,
   })
 
   return {
@@ -110,6 +117,9 @@ export function installMockGamepadAPI() {
   }
 }
 
+// Auto-install on import to ensure our mock is active
+installMockGamepadAPI()
+
 /**
  * Set a gamepad at a specific index
  */
@@ -120,10 +130,12 @@ export function setGamepad(index: number, gamepad: Gamepad | null) {
 }
 
 /**
- * Clear all gamepads
+ * Clear all gamepads (mutates in place to preserve reference)
  */
 export function clearGamepads() {
-  mockGamepads = [null, null, null, null]
+  for (let i = 0; i < 4; i++) {
+    mockGamepads[i] = null
+  }
 }
 
 /**

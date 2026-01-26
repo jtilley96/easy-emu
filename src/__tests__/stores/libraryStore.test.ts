@@ -305,7 +305,7 @@ describe('libraryStore', () => {
       useLibraryStore.setState({ romFolders: ['/roms'] })
 
       const api = getMockElectronAPI()
-      let resolvePromise: () => void
+      let resolvePromise: (value?: unknown) => void
       api.library.scan.mockImplementation(() => new Promise(resolve => {
         resolvePromise = resolve
       }))

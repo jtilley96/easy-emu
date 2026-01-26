@@ -6,7 +6,6 @@ import {
   setGamepad,
   clearGamepads,
   pressButton,
-  releaseButton,
   fireGamepadConnected,
   BUTTON_INDICES
 } from '../mocks/gamepadAPI'

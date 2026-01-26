@@ -27,6 +27,17 @@ describe('GameCard', () => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
 
+    // Add cores API mock to electronAPI
+    ;(window as any).electronAPI = {
+      ...window.electronAPI,
+      cores: {
+        getInstalled: vi.fn().mockResolvedValue([]),
+        getAvailable: vi.fn().mockResolvedValue([]),
+        download: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined)
+      }
+    }
+
     // Reset stores
     useLibraryStore.setState({
       games: [],
@@ -49,15 +60,25 @@ describe('GameCard', () => {
 
       renderWithRouter(<GameCard game={game} />)
 
-      expect(screen.getByText('Super Mario Bros.')).toBeInTheDocument()
+      // Title may appear multiple times (e.g., in title and tooltip), so check at least one exists
+      const titles = screen.getAllByText('Super Mario Bros.')
+      expect(titles.length).toBeGreaterThan(0)
     })
 
-    it('shows platform badge', () => {
+    it('shows platform badge', async () => {
       const game = createMockGame({ platform: 'nes' })
 
       renderWithRouter(<GameCard game={game} />)
 
-      expect(screen.getByText('nes')).toBeInTheDocument()
+      // Platform is shown as either an image (with alt text) or text
+      // For NES, there's a platform image, so look for the alt text or title
+      await waitFor(() => {
+        // Try to find platform indicator - either as image alt, title, or text
+        const platformByAlt = screen.queryAllByAltText(/nintendo entertainment system/i)
+        const platformByText = screen.queryAllByText('nes')
+        const hasIndicator = platformByAlt.length > 0 || platformByText.length > 0
+        expect(hasIndicator).toBe(true)
+      })
     })
 
     it('shows favorite indicator when game is favorited', () => {
@@ -220,7 +241,7 @@ describe('GameCard', () => {
       renderWithRouter(<GameCard game={game} variant="list" />)
 
       const favoriteButton = screen.getByTitle('Add to favorites')
-      const event = fireEvent.click(favoriteButton)
+      fireEvent.click(favoriteButton)
 
       // If propagation wasn't stopped, navigation would occur
       await waitFor(() => {

@@ -8,11 +8,9 @@ import {
   clearGamepads,
   pressButton,
   releaseButton,
-  setAxis,
   fireGamepadConnected,
   fireGamepadDisconnected,
-  BUTTON_INDICES,
-  AXIS_INDICES
+  BUTTON_INDICES
 } from '../mocks/gamepadAPI'
 import { flushAnimationFrames } from '../../../vitest.setup'
 
@@ -20,7 +18,6 @@ import { flushAnimationFrames } from '../../../vitest.setup'
 // So we'll test its public interface
 
 describe('gamepadService', () => {
-  let GamepadService: typeof import('../../services/gamepadService').default
   let getGamepadService: typeof import('../../services/gamepadService').getGamepadService
 
   beforeEach(async () => {
@@ -29,7 +26,6 @@ describe('gamepadService', () => {
 
     // Re-import to get fresh instance
     const module = await import('../../services/gamepadService')
-    GamepadService = module.default
     getGamepadService = module.getGamepadService
   })
 
