@@ -7,7 +7,7 @@ export interface GamepadState {
   index: number
   name: string
   connected: boolean
-  type: 'xbox' | 'playstation' | 'nintendo' | 'generic'
+  type: 'xbox' | 'playstation' | 'nintendo' | 'steamdeck' | 'generic'
   buttons: { pressed: boolean; justPressed: boolean; value: number }[]
   axes: number[]
 }
@@ -15,7 +15,7 @@ export interface GamepadState {
 export interface ControllerMapping {
   id: string
   name: string
-  type: 'xbox' | 'playstation' | 'nintendo' | 'generic'
+  type: 'xbox' | 'playstation' | 'nintendo' | 'steamdeck' | 'generic'
   buttonMappings: Record<string, number>  // action -> button index
   axisMappings: Record<string, { axis: number; direction: 1 | -1 }>
 }
@@ -103,6 +103,27 @@ const NINTENDO_MAPPING: Record<ButtonAction, number> = {
   home: 16         // Home
 }
 
+// Steam Deck mapping (follows standard/Xbox layout)
+const STEAM_DECK_MAPPING: Record<ButtonAction, number> = {
+  confirm: 0,      // A
+  back: 1,         // B
+  option1: 2,      // X
+  option2: 3,      // Y
+  lb: 4,           // L1
+  rb: 5,           // R1
+  lt: 6,           // L2
+  rt: 7,           // R2
+  select: 8,       // Select/View
+  start: 9,        // Start/Menu
+  l3: 10,          // L3
+  r3: 11,          // R3
+  dpadUp: 12,
+  dpadDown: 13,
+  dpadLeft: 14,
+  dpadRight: 15,
+  home: 16         // Steam button
+}
+
 type GamepadListener = (gamepads: GamepadState[]) => void
 type ConnectionListener = (gamepad: GamepadState, connected: boolean) => void
 
@@ -151,6 +172,16 @@ class GamepadService {
     this.gamepads.set(gamepad.index, state)
     this.previousButtonStates.set(gamepad.index, gamepad.buttons.map(() => false))
 
+    // Diagnostic logging for Steam Deck debugging
+    console.log('[Gamepad] Connected:', {
+      id: gamepad.id,
+      index: gamepad.index,
+      mapping: gamepad.mapping,
+      buttons: gamepad.buttons.length,
+      axes: gamepad.axes.length,
+      detectedType: state.type
+    })
+
     this.connectionListeners.forEach(listener => listener(state, true))
   }
 
@@ -164,9 +195,13 @@ class GamepadService {
     this.previousButtonStates.delete(event.gamepad.index)
   }
 
-  private detectControllerType(id: string): 'xbox' | 'playstation' | 'nintendo' | 'generic' {
+  private detectControllerType(id: string): 'xbox' | 'playstation' | 'nintendo' | 'steamdeck' | 'generic' {
     const lowerId = id.toLowerCase()
 
+    // Steam Deck detection (check first as it may also contain other keywords)
+    if (lowerId.includes('steam') || lowerId.includes('deck') || lowerId.includes('valve')) {
+      return 'steamdeck'
+    }
     if (lowerId.includes('xbox') || lowerId.includes('xinput') || lowerId.includes('microsoft')) {
       return 'xbox'
     }
@@ -199,7 +234,7 @@ class GamepadService {
     }
   }
 
-  private getControllerName(id: string, type: 'xbox' | 'playstation' | 'nintendo' | 'generic'): string {
+  private getControllerName(id: string, type: 'xbox' | 'playstation' | 'nintendo' | 'steamdeck' | 'generic'): string {
     // Try to extract a readable name
     const match = id.match(/^([^(]+)/)
     if (match) {
@@ -214,6 +249,7 @@ class GamepadService {
       case 'xbox': return 'Xbox Controller'
       case 'playstation': return 'PlayStation Controller'
       case 'nintendo': return 'Nintendo Controller'
+      case 'steamdeck': return 'Steam Deck Controller'
       default: return 'Controller'
     }
   }
@@ -288,12 +324,14 @@ class GamepadService {
   }
 
   // Get the button index for an action based on controller type
-  getButtonIndex(action: ButtonAction, type: 'xbox' | 'playstation' | 'nintendo' | 'generic'): number {
+  getButtonIndex(action: ButtonAction, type: 'xbox' | 'playstation' | 'nintendo' | 'steamdeck' | 'generic'): number {
     switch (type) {
       case 'playstation':
         return PLAYSTATION_MAPPING[action]
       case 'nintendo':
         return NINTENDO_MAPPING[action]
+      case 'steamdeck':
+        return STEAM_DECK_MAPPING[action]
       case 'xbox':
       default:
         return XBOX_MAPPING[action]
@@ -368,12 +406,14 @@ class GamepadService {
   }
 
   // Get default mapping for controller type
-  getDefaultMapping(type: 'xbox' | 'playstation' | 'nintendo' | 'generic'): Record<ButtonAction, number> {
+  getDefaultMapping(type: 'xbox' | 'playstation' | 'nintendo' | 'steamdeck' | 'generic'): Record<ButtonAction, number> {
     switch (type) {
       case 'playstation':
         return { ...PLAYSTATION_MAPPING }
       case 'nintendo':
         return { ...NINTENDO_MAPPING }
+      case 'steamdeck':
+        return { ...STEAM_DECK_MAPPING }
       case 'xbox':
       default:
         return { ...XBOX_MAPPING }

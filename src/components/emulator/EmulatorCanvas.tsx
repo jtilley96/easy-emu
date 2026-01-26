@@ -370,12 +370,16 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
 
     // Initialize emulator
     const initializeEmulator = useCallback(async () => {
+      console.log('[Emulator] Starting initialization for game:', gameId)
+
       // Prevent double initialization
       if (isEmulatorLoading || isEmulatorLoaded) {
+        console.log('[Emulator] Skipping - already loading or loaded')
         return
       }
 
       if (!containerRef.current) {
+        console.log('[Emulator] Skipping - no container ref')
         return
       }
 
@@ -383,10 +387,12 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
 
       try {
         // Get game info
+        console.log('[Emulator] Fetching game info...')
         const gameInfo = await window.electronAPI.embedded.getGameInfo(gameId)
         if (!gameInfo) {
           throw new Error('Game not found')
         }
+        console.log('[Emulator] Game info:', { platform: gameInfo.platform, title: gameInfo.title })
 
         // Check if still mounted
         if (!mountedRef.current) {
@@ -395,19 +401,25 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         }
 
         // Get core paths
+        console.log('[Emulator] Fetching core paths for platform:', gameInfo.platform)
         const corePaths = await window.electronAPI.embedded.getCorePaths(gameInfo.platform)
         if (!corePaths) {
           throw new Error(`No core installed for platform: ${gameInfo.platform}`)
         }
+        console.log('[Emulator] Core paths:', corePaths)
 
         // Load ROM data directly (avoids CSP/URL issues)
+        console.log('[Emulator] Loading ROM data...')
         const romData = await window.electronAPI.embedded.getGameRomData(gameId)
         if (!romData || romData.length === 0) {
           throw new Error('Failed to load ROM file')
         }
+        console.log('[Emulator] ROM loaded:', romData.length, 'bytes')
 
         // Load existing SRAM
+        console.log('[Emulator] Loading SRAM...')
         const sramData = await loadSRAM(gameId)
+        console.log('[Emulator] SRAM:', sramData ? `${sramData.byteLength} bytes` : 'none')
 
         // Check if still mounted
         if (!mountedRef.current || !containerRef.current) {
@@ -492,16 +504,19 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
 
         // Set up game start callback
         window.EJS_onGameStart = () => {
+          console.log('[Emulator] EJS_onGameStart callback fired')
           if (mountedRef.current) {
             emulatorRef.current = window.EJS_emulator
             isEmulatorLoaded = true
             isEmulatorLoading = false
+            console.log('[Emulator] Emulator started successfully')
             onStart?.()
-            
+
             // Auto-select gamepad after emulator is ready
             // Only use DOM manipulation if storage-based approach didn't work
             // Check if gamepad was already set via storage by checking if it's being used
             if (gamepadIndexRef.current !== null) {
+              console.log('[Emulator] Auto-selecting gamepad:', gamepadIndexRef.current)
               // Try DOM manipulation immediately (storage approach is tried first, this is fallback)
               // Minimal delay to ensure EmulatorJS UI has started rendering
               setTimeout(() => {
@@ -539,18 +554,32 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         }
 
         // Load the EmulatorJS loader script
+        console.log('[Emulator] Loading EmulatorJS script from:', `${EMULATORJS_CDN}/data/loader.js`)
         const script = document.createElement('script')
         script.src = `${EMULATORJS_CDN}/data/loader.js`
         script.async = true
         script.id = 'emulatorjs-loader'
-        script.onerror = () => {
+        script.onload = () => {
+          console.log('[Emulator] EmulatorJS script loaded successfully')
+        }
+        script.onerror = (e) => {
+          console.error('[Emulator] Failed to load EmulatorJS script:', e)
           isEmulatorLoading = false
-          onError?.(new Error('Failed to load EmulatorJS'))
+          onError?.(new Error('Failed to load EmulatorJS - check network connection'))
         }
         document.body.appendChild(script)
 
+        // Add timeout for initialization
+        setTimeout(() => {
+          if (isEmulatorLoading && !isEmulatorLoaded) {
+            console.error('[Emulator] Initialization timeout - EmulatorJS did not start within 30 seconds')
+            isEmulatorLoading = false
+            onError?.(new Error('EmulatorJS initialization timeout - game may not be compatible'))
+          }
+        }, 30000)
+
       } catch (error) {
-        console.error('Failed to initialize emulator:', error)
+        console.error('[Emulator] Failed to initialize emulator:', error)
         isEmulatorLoading = false
         onError?.(error as Error)
       }

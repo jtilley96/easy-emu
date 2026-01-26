@@ -15,6 +15,8 @@ function getControllerIcon(type: GamepadState['type']): string {
       return '🎮'
     case 'nintendo':
       return '🕹️'
+    case 'steamdeck':
+      return '🎮'
     default:
       return '🎮'
   }
@@ -28,6 +30,8 @@ function getControllerTypeName(type: GamepadState['type']): string {
       return 'PlayStation'
     case 'nintendo':
       return 'Nintendo'
+    case 'steamdeck':
+      return 'Steam Deck'
     default:
       return 'Generic'
   }

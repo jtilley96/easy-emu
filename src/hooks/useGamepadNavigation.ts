@@ -99,7 +99,8 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
   const checkStickDirection = useCallback((gamepadIndex: number): NavigationDirection | null => {
     const service = getGamepadService()
     const leftStick = service.getLeftStick(gamepadIndex)
-    const threshold = 0.7
+    // Lowered threshold from 0.7 to 0.5 for better Steam Deck compatibility
+    const threshold = 0.5
 
     // Prefer vertical axis if both are active
     if (Math.abs(leftStick.y) > Math.abs(leftStick.x)) {
@@ -112,6 +113,10 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
 
     return null
   }, [])
+
+  // Debug logging counter (log every 3 seconds when inputs are detected)
+  const lastDebugLog = useRef<number>(0)
+  const DEBUG_LOG_INTERVAL = 3000 // ms
 
   useEffect(() => {
     if (!enabled) {
@@ -154,6 +159,22 @@ export function useGamepadNavigation(options: UseGamepadNavigationOptions = {}) 
       else if (dpadLeft) currentDirection = 'left'
       else if (dpadRight) currentDirection = 'right'
       else currentDirection = stickDirection
+
+      // Diagnostic logging (throttled to avoid spam)
+      const leftStick = service.getLeftStick(gamepadIndex)
+      const hasInput = dpadUp || dpadDown || dpadLeft || dpadRight ||
+                       Math.abs(leftStick.x) > 0.1 || Math.abs(leftStick.y) > 0.1
+      if (hasInput && now - lastDebugLog.current > DEBUG_LOG_INTERVAL) {
+        console.log('[Navigation] Input detected:', {
+          gamepadIndex,
+          dpad: { up: dpadUp, down: dpadDown, left: dpadLeft, right: dpadRight },
+          leftStick: { x: leftStick.x.toFixed(2), y: leftStick.y.toFixed(2) },
+          stickDirection,
+          currentDirection,
+          threshold: 0.5
+        })
+        lastDebugLog.current = now
+      }
 
       // Handle navigation with repeat
       const state = navigationState.current
