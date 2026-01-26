@@ -1734,7 +1734,7 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
         } else {
           handleInstallUpdate()
         }
-      } else if (updateInfo?.hasUpdate && updateProgress.status === 'idle') {
+      } else if (updateInfo?.hasUpdate && (updateProgress.status === 'idle' || updateProgress.status === 'error')) {
         handleDownloadUpdate()
       } else if (updateProgress.status === 'idle' || updateProgress.status === 'error') {
         handleCheckForUpdates()

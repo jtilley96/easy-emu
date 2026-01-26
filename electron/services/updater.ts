@@ -65,7 +65,7 @@ function ensureDownloadsDirectory(): void {
 
 /**
  * Parse version string into comparable parts
- * Handles formats like: 1.0.0, v1.0.0, 1.0.0-alpha, 1.0.0-beta.1
+ * Handles formats like: 1.0.0, v1.0.0, 1.0.0-alpha, 1.0.0-beta.1, 1.0.0-alpha-1
  */
 function parseVersion(version: string): {
   major: number
@@ -74,7 +74,11 @@ function parseVersion(version: string): {
   prerelease: string
 } {
   const cleaned = version.replace(/^v/, '')
-  const [versionPart, prerelease = ''] = cleaned.split('-')
+  // Find the first hyphen to split version from prerelease
+  // This preserves the full prerelease string including any additional hyphens
+  const hyphenIndex = cleaned.indexOf('-')
+  const versionPart = hyphenIndex >= 0 ? cleaned.substring(0, hyphenIndex) : cleaned
+  const prerelease = hyphenIndex >= 0 ? cleaned.substring(hyphenIndex + 1) : ''
   const [major = 0, minor = 0, patch = 0] = versionPart.split('.').map(Number)
   return { major, minor, patch, prerelease }
 }
