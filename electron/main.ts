@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, protocol, session } from 'e
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { initializeServices } from './services/index'
+import { initializeServices, getConfigValue, checkForUpdates } from './services/index'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -140,6 +140,22 @@ app.whenReady().then(async () => {
 
   // Initialize all services (config, library, emulators, metadata)
   initializeServices(mainWindow)
+
+  // Check for updates on startup if enabled
+  const shouldCheckUpdates = getConfigValue('checkUpdates')
+  if (shouldCheckUpdates !== false) {
+    // Delay the check to not block startup
+    setTimeout(async () => {
+      try {
+        const updateInfo = await checkForUpdates()
+        if (updateInfo?.hasUpdate && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updater:updateAvailable', updateInfo)
+        }
+      } catch (error) {
+        console.error('Startup update check failed:', error)
+      }
+    }, 5000)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

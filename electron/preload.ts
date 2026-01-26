@@ -143,6 +143,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteState: (gameId: string, slot: number) => ipcRenderer.invoke('saves:deleteState', gameId, slot),
     listStates: (gameId: string) => ipcRenderer.invoke('saves:listStates', gameId),
     getStateScreenshot: (gameId: string, slot: number) => ipcRenderer.invoke('saves:getStateScreenshot', gameId, slot)
+  },
+
+  // Updater operations
+  updater: {
+    check: () => ipcRenderer.invoke('updater:check'),
+    download: (downloadUrl: string, assetName: string, assetSize: number) =>
+      ipcRenderer.invoke('updater:download', downloadUrl, assetName, assetSize),
+    openDownloadFolder: () => ipcRenderer.invoke('updater:openDownloadFolder'),
+    installUpdate: () => ipcRenderer.invoke('updater:installUpdate'),
+    getDownloadPath: () => ipcRenderer.invoke('updater:getDownloadPath'),
+    onProgress: (callback: (progress: UpdateDownloadProgress) => void) => {
+      const fn = (_: unknown, progress: UpdateDownloadProgress) => callback(progress)
+      ipcRenderer.on('updater:progress', fn)
+      return () => ipcRenderer.removeListener('updater:progress', fn)
+    },
+    onUpdateAvailable: (callback: (updateInfo: UpdateInfo) => void) => {
+      const fn = (_: unknown, updateInfo: UpdateInfo) => callback(updateInfo)
+      ipcRenderer.on('updater:updateAvailable', fn)
+      return () => ipcRenderer.removeListener('updater:updateAvailable', fn)
+    }
   }
 })
 
@@ -234,6 +254,15 @@ export interface ElectronAPI {
     deleteState: (gameId: string, slot: number) => Promise<void>
     listStates: (gameId: string) => Promise<SaveStateInfo[]>
     getStateScreenshot: (gameId: string, slot: number) => Promise<ArrayBuffer | null>
+  }
+  updater: {
+    check: () => Promise<UpdateInfo | null>
+    download: (downloadUrl: string, assetName: string, assetSize: number) => Promise<string>
+    openDownloadFolder: () => Promise<void>
+    installUpdate: () => Promise<void>
+    getDownloadPath: () => Promise<string | null>
+    onProgress: (callback: (progress: UpdateDownloadProgress) => void) => () => void
+    onUpdateAvailable: (callback: (updateInfo: UpdateInfo) => void) => () => void
   }
 }
 
@@ -354,6 +383,27 @@ interface SaveStateInfo {
   timestamp?: string
   screenshotPath?: string
   size?: number
+}
+
+interface UpdateInfo {
+  currentVersion: string
+  latestVersion: string
+  hasUpdate: boolean
+  releaseNotes: string
+  releaseUrl: string
+  downloadUrl: string
+  publishedAt: string
+  assetName: string
+  assetSize: number
+}
+
+interface UpdateDownloadProgress {
+  status: 'idle' | 'checking' | 'downloading' | 'complete' | 'error'
+  progress: number
+  downloadedBytes: number
+  totalBytes: number
+  downloadPath?: string
+  error?: string
 }
 
 declare global {

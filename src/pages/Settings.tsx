@@ -26,7 +26,7 @@ import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
 import CoreManagerSection from '../components/settings/CoreManagerSection'
 import ControllersSettings from '../components/settings/ControllersSettings'
-import { EmulatorInfo } from '../types'
+import { EmulatorInfo, UpdateInfo, UpdateDownloadProgress } from '../types'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 import { useLayoutContext } from '../components/Layout'
 import { SettingsSectionProps } from '../types'
@@ -1600,10 +1600,21 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
   const [version, setVersion] = useState('0.0.0')
   const [loading, setLoading] = useState(true)
 
-  // 4 rows: startMinimized, checkUpdates, checkForUpdates button, reset buttons (2 cols)
+  // Update state
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [updateProgress, setUpdateProgress] = useState<UpdateDownloadProgress>({
+    status: 'idle',
+    progress: 0,
+    downloadedBytes: 0,
+    totalBytes: 0
+  })
+
+  // 4 rows: startMinimized, checkUpdates, update buttons (1 or 2 cols), reset buttons (2 cols)
+  // Row 2 has 2 cols when update is downloaded (Open Folder + Install)
+  const updateRow2Cols = updateProgress.status === 'complete' ? 2 : 1
   useEffect(() => {
-    onGridChange({ rows: 4, cols: [1, 1, 1, 2] })
-  }, [onGridChange])
+    onGridChange({ rows: 4, cols: [1, 1, updateRow2Cols, 2] })
+  }, [onGridChange, updateRow2Cols])
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -1622,6 +1633,21 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
     loadSettings()
   }, [])
 
+  // Subscribe to update progress events
+  useEffect(() => {
+    const unsubscribeProgress = window.electronAPI.updater.onProgress((progress) => {
+      setUpdateProgress(progress)
+    })
+    const unsubscribeAvailable = window.electronAPI.updater.onUpdateAvailable((info) => {
+      setUpdateInfo(info)
+      // Toast notification is handled globally in App.tsx
+    })
+    return () => {
+      unsubscribeProgress()
+      unsubscribeAvailable()
+    }
+  }, [])
+
   const handleStartMinimizedChange = async (checked: boolean) => {
     setStartMinimized(checked)
     await window.electronAPI.config.set('startMinimized', checked)
@@ -1636,6 +1662,54 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
     addToast('warning', 'This feature is not yet implemented')
   }
 
+  const handleCheckForUpdates = async () => {
+    try {
+      setUpdateProgress({ status: 'checking', progress: 0, downloadedBytes: 0, totalBytes: 0 })
+      const info = await window.electronAPI.updater.check()
+      setUpdateInfo(info)
+      if (info?.hasUpdate) {
+        addToast('info', `Update available: v${info.latestVersion}`)
+      } else {
+        addToast('success', 'You are on the latest version')
+      }
+    } catch (error) {
+      console.error('Failed to check for updates:', error)
+      addToast('error', 'Failed to check for updates')
+      setUpdateProgress({ status: 'error', progress: 0, downloadedBytes: 0, totalBytes: 0, error: (error as Error).message })
+    }
+  }
+
+  const handleDownloadUpdate = async () => {
+    if (!updateInfo?.downloadUrl) {
+      addToast('error', 'No download URL available')
+      return
+    }
+    try {
+      await window.electronAPI.updater.download(
+        updateInfo.downloadUrl,
+        updateInfo.assetName,
+        updateInfo.assetSize
+      )
+      addToast('success', 'Update downloaded successfully')
+    } catch (error) {
+      console.error('Failed to download update:', error)
+      addToast('error', 'Failed to download update')
+    }
+  }
+
+  const handleOpenDownloadFolder = () => {
+    window.electronAPI.updater.openDownloadFolder()
+  }
+
+  const handleInstallUpdate = async () => {
+    try {
+      await window.electronAPI.updater.installUpdate()
+    } catch (error) {
+      console.error('Failed to install update:', error)
+      addToast('error', 'Failed to install update')
+    }
+  }
+
   // Helper to check if cell is focused
   const isCellFocused = (row: number, col: number = 0) => {
     return isFocused && focusedRow === row && focusedCol === col
@@ -1645,13 +1719,24 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
   const handleConfirm = useCallback(() => {
     // Ignore if we just activated (prevents double-activation from held A button)
     if (justActivatedRef.current) return
-    
+
     if (focusedRow === 0) {
       handleStartMinimizedChange(!startMinimized)
     } else if (focusedRow === 1) {
       handleCheckUpdatesChange(!checkUpdates)
     } else if (focusedRow === 2) {
-      addToast('info', 'Update check not implemented yet')
+      // Update button row - action depends on state
+      if (updateProgress.status === 'complete') {
+        if (focusedCol === 0) {
+          handleOpenDownloadFolder()
+        } else {
+          handleInstallUpdate()
+        }
+      } else if (updateInfo?.hasUpdate && (updateProgress.status === 'idle' || updateProgress.status === 'error')) {
+        handleDownloadUpdate()
+      } else if (updateProgress.status === 'idle' || updateProgress.status === 'error') {
+        handleCheckForUpdates()
+      }
     } else if (focusedRow === 3) {
       if (focusedCol === 0) {
         setFirstRun(true)
@@ -1660,7 +1745,7 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
         handleResetDefaults()
       }
     }
-  }, [focusedRow, focusedCol, startMinimized, checkUpdates, setFirstRun, addToast, justActivatedRef])
+  }, [focusedRow, focusedCol, startMinimized, checkUpdates, setFirstRun, addToast, justActivatedRef, updateInfo, updateProgress.status])
 
   // Gamepad navigation
   useGamepadNavigation({
@@ -1677,13 +1762,14 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
           onFocusChange(focusedRow + 1, 0)
         }
       } else if (direction === 'left') {
-        if (focusedRow === 3 && focusedCol > 0) {
+        if ((focusedRow === 2 || focusedRow === 3) && focusedCol > 0) {
           onFocusChange(focusedRow, focusedCol - 1)
         } else {
           onBack()
         }
       } else if (direction === 'right') {
-        if (focusedRow === 3 && focusedCol < 1) {
+        const maxCol = focusedRow === 2 ? updateRow2Cols - 1 : 1
+        if ((focusedRow === 2 || focusedRow === 3) && focusedCol < maxCol) {
           onFocusChange(focusedRow, focusedCol + 1)
         }
       }
@@ -1742,18 +1828,165 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
       <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Updates</h3>
         <p className="text-surface-400 mb-4">Current version: {version}</p>
-        <button
-          data-focus-row={2}
-          data-focus-col={0}
-          onClick={() => addToast('info', 'Update check not implemented yet')}
-          className={`px-4 py-2 rounded-lg transition-all ${
-            isCellFocused(2)
-              ? 'bg-accent text-white ring-2 ring-accent scale-105'
-              : 'bg-surface-700 hover:bg-surface-600'
-          }`}
-        >
-          Check for Updates
-        </button>
+
+        {/* Update available banner */}
+        {updateInfo?.hasUpdate && updateProgress.status !== 'downloading' && updateProgress.status !== 'complete' && (
+          <div className="bg-accent/20 border border-accent/30 rounded-lg p-4 mb-4">
+            <p className="text-accent font-medium mb-1">
+              Update available: v{updateInfo.latestVersion}
+            </p>
+            <p className="text-surface-400 text-sm">
+              Released: {new Date(updateInfo.publishedAt).toLocaleDateString()}
+            </p>
+            {updateInfo.releaseNotes && (
+              <p className="text-surface-300 text-sm mt-2 line-clamp-3">
+                {updateInfo.releaseNotes.slice(0, 200)}
+                {updateInfo.releaseNotes.length > 200 ? '...' : ''}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Downloading progress */}
+        {updateProgress.status === 'downloading' && (
+          <div className="bg-surface-800 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-surface-300">Downloading update...</span>
+              <span className="text-accent">{updateProgress.progress}%</span>
+            </div>
+            <div className="w-full bg-surface-700 rounded-full h-2">
+              <div
+                className="bg-accent h-2 rounded-full transition-all duration-300"
+                style={{ width: `${updateProgress.progress}%` }}
+              />
+            </div>
+            <p className="text-surface-400 text-sm mt-2">
+              {(updateProgress.downloadedBytes / 1024 / 1024).toFixed(1)} MB / {(updateProgress.totalBytes / 1024 / 1024).toFixed(1)} MB
+            </p>
+          </div>
+        )}
+
+        {/* Download complete */}
+        {updateProgress.status === 'complete' && (
+          <div className="bg-green-500/20 border border-green-500/30 rounded-lg p-4 mb-4">
+            <p className="text-green-400 font-medium mb-1">
+              Update downloaded successfully!
+            </p>
+            <p className="text-surface-400 text-sm">
+              {updateInfo?.assetName}
+            </p>
+          </div>
+        )}
+
+        {/* Error state */}
+        {updateProgress.status === 'error' && updateProgress.error && (
+          <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-4 mb-4">
+            <p className="text-red-400 font-medium">
+              Error: {updateProgress.error}
+            </p>
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div className="flex gap-3">
+          {/* Checking state */}
+          {updateProgress.status === 'checking' && (
+            <button
+              disabled
+              data-focus-row={2}
+              data-focus-col={0}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                isCellFocused(2)
+                  ? 'bg-surface-600 text-surface-300 ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 text-surface-400'
+              }`}
+            >
+              <Loader2 size={16} className="animate-spin" />
+              Checking...
+            </button>
+          )}
+
+          {/* Downloading state */}
+          {updateProgress.status === 'downloading' && (
+            <button
+              disabled
+              data-focus-row={2}
+              data-focus-col={0}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-all ${
+                isCellFocused(2)
+                  ? 'bg-surface-600 text-surface-300 ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 text-surface-400'
+              }`}
+            >
+              <Loader2 size={16} className="animate-spin" />
+              Downloading... {updateProgress.progress}%
+            </button>
+          )}
+
+          {/* Idle or error - show Check for Updates */}
+          {(updateProgress.status === 'idle' || updateProgress.status === 'error') && !updateInfo?.hasUpdate && (
+            <button
+              data-focus-row={2}
+              data-focus-col={0}
+              onClick={handleCheckForUpdates}
+              className={`px-4 py-2 rounded-lg transition-all ${
+                isCellFocused(2)
+                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                  : 'bg-surface-700 hover:bg-surface-600'
+              }`}
+            >
+              Check for Updates
+            </button>
+          )}
+
+          {/* Update available - show Download button (or Retry if error) */}
+          {updateInfo?.hasUpdate && (updateProgress.status === 'idle' || updateProgress.status === 'error') && (
+            <button
+              data-focus-row={2}
+              data-focus-col={0}
+              onClick={handleDownloadUpdate}
+              className={`px-4 py-2 rounded-lg transition-all ${
+                isCellFocused(2)
+                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                  : 'bg-accent hover:bg-accent-hover'
+              }`}
+            >
+              <Download size={16} className="inline mr-2" />
+              {updateProgress.status === 'error' ? 'Retry Download' : 'Download Update'}
+            </button>
+          )}
+
+          {/* Download complete - show Open Folder and Install buttons */}
+          {updateProgress.status === 'complete' && (
+            <>
+              <button
+                data-focus-row={2}
+                data-focus-col={0}
+                onClick={handleOpenDownloadFolder}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  isCellFocused(2, 0)
+                    ? 'bg-accent text-white ring-2 ring-accent scale-105'
+                    : 'bg-surface-700 hover:bg-surface-600'
+                }`}
+              >
+                <ExternalLink size={16} className="inline mr-2" />
+                Open Folder
+              </button>
+              <button
+                data-focus-row={2}
+                data-focus-col={1}
+                onClick={handleInstallUpdate}
+                className={`px-4 py-2 rounded-lg transition-all ${
+                  isCellFocused(2, 1)
+                    ? 'bg-green-500 text-white ring-2 ring-green-400 scale-105'
+                    : 'bg-green-500 hover:bg-green-600'
+                }`}
+              >
+                Install Update
+              </button>
+            </>
+          )}
+        </div>
       </section>
 
       <section>

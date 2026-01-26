@@ -148,3 +148,25 @@ export interface SettingsSectionProps {
   justActivatedRef: React.MutableRefObject<boolean>
   scrollRef?: React.RefObject<HTMLElement>
 }
+
+// Updater Types
+export interface UpdateInfo {
+  currentVersion: string
+  latestVersion: string
+  hasUpdate: boolean
+  releaseNotes: string
+  releaseUrl: string
+  downloadUrl: string
+  publishedAt: string
+  assetName: string
+  assetSize: number
+}
+
+export interface UpdateDownloadProgress {
+  status: 'idle' | 'checking' | 'downloading' | 'complete' | 'error'
+  progress: number
+  downloadedBytes: number
+  totalBytes: number
+  downloadPath?: string
+  error?: string
+}
