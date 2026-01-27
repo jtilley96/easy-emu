@@ -534,16 +534,31 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
             isEmulatorLoaded = true
             isEmulatorLoading = false
             onStart?.()
-            
+
+            // Load backend SRAM into emulator after game starts
+            if (sramData && sramData.byteLength > 0) {
+              try {
+                const emu = window.EJS_emulator
+                const sramUint8 = new Uint8Array(sramData)
+                if (emu?.gameManager?.setSaveFile) {
+                  emu.gameManager.setSaveFile(sramUint8)
+                } else if (emu?.gameManager?.setSRAM) {
+                  emu.gameManager.setSRAM(sramUint8)
+                } else if ((emu as any)?.setSaveFile) {
+                  (emu as any).setSaveFile(sramUint8)
+                } else if ((emu as any)?.setSRAM) {
+                  (emu as any).setSRAM(sramUint8)
+                }
+              } catch (err) {
+                console.error('[EmulatorCanvas] Failed to load SRAM into emulator:', err)
+              }
+            }
+
             // Auto-select gamepad after emulator is ready
-            // Only use DOM manipulation if storage-based approach didn't work
-            // Check if gamepad was already set via storage by checking if it's being used
             if (gamepadIndexRef.current !== null) {
-              // Try DOM manipulation immediately (storage approach is tried first, this is fallback)
-              // Minimal delay to ensure EmulatorJS UI has started rendering
               setTimeout(() => {
                 autoSelectGamepad(gamepadIndexRef.current!)
-              }, 500) // Reduced from 1000-5000ms to 500ms for near-instant selection
+              }, 500)
             }
 
             // Start SRAM auto-save every 30 seconds
@@ -562,13 +577,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
               } catch { /* ignore auto-save errors */ }
             }, 30000)
           }
-        }
-
-        // Load SRAM if available - provide it via blob URL so EmulatorJS loads it natively
-        if (sramData && sramData.byteLength > 0) {
-          const sramBlob = new Blob([new Uint8Array(sramData)])
-          const sramBlobUrl = URL.createObjectURL(sramBlob)
-          window.EJS_gameSaveDataUrl = sramBlobUrl
         }
 
         // Create player div
@@ -685,9 +693,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
       if (window.EJS_gameUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(window.EJS_gameUrl)
       }
-      if ((window as any).EJS_gameSaveDataUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL((window as any).EJS_gameSaveDataUrl)
-      }
 
       // Remove the EmulatorJS container element (stops audio context)
       const ejsPlayer = document.getElementById('ejs-player')
@@ -707,7 +712,7 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         'EJS_onGameStart', 'EJS_emulator', 'EJS_gameData',
         'EJS_gameName', 'EJS_biosUrl', 'EJS_loadStateURL', 'EJS_cheats',
         'EJS_language', 'EJS_settings', 'EJS_CacheLimit', 'EJS_AdUrl',
-        'EJS_Buttons', 'EJS_ready', 'EJS_onReady', 'EJS_gameSaveDataUrl'
+        'EJS_Buttons', 'EJS_ready', 'EJS_onReady'
       ]
       ejsGlobals.forEach(key => {
         try {
