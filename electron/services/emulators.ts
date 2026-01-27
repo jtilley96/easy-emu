@@ -528,6 +528,22 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
     }
   }
 
+  // Check for xemu BIOS files
+  if (emulatorDef.id === 'xemu') {
+    const biosPaths = getConfigValue('biosPaths') as Record<string, string>
+    const missing: string[] = []
+    if (!biosPaths['xbox-mcpx'] || !fs.existsSync(biosPaths['xbox-mcpx'])) missing.push('Xbox MCPX Boot ROM')
+    if (!biosPaths['xbox-bios'] || !fs.existsSync(biosPaths['xbox-bios'])) missing.push('Xbox Flash ROM (BIOS)')
+    if (!biosPaths['xbox-hdd'] || !fs.existsSync(biosPaths['xbox-hdd'])) missing.push('Xbox HDD Image')
+    if (missing.length > 0) {
+      throw new Error(
+        `Xbox BIOS files not configured: ${missing.join(', ')}.\n\n` +
+        `xemu requires MCPX Boot ROM, Flash ROM, and HDD Image to run.\n\n` +
+        `Open xemu and configure these files in its Settings → System, then set the paths in EasyEmu Settings → BIOS Files.`
+      )
+    }
+  }
+
   const romPath = resolveRomPath(game)
   if (!fs.existsSync(romPath)) {
     throw new Error('ROM file not found. It may have been moved or deleted.')

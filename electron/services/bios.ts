@@ -69,6 +69,30 @@ const BIOS_DEFINITIONS: BiosDefinition[] = [
     platform: 'nds',
     required: true,
     filenames: ['firmware.bin', 'nds_firmware.bin']
+  },
+  {
+    id: 'xbox-mcpx',
+    name: 'Xbox MCPX Boot ROM',
+    description: 'Required for xemu (MCPX HLE v1.0)',
+    platform: 'xbox',
+    required: true,
+    filenames: ['mcpx_1.0.bin']
+  },
+  {
+    id: 'xbox-bios',
+    name: 'Xbox Flash ROM (BIOS)',
+    description: 'Required for xemu (modified retail BIOS)',
+    platform: 'xbox',
+    required: true,
+    filenames: ['Complex_4627.bin', 'xbox_bios.bin', 'bios.bin']
+  },
+  {
+    id: 'xbox-hdd',
+    name: 'Xbox HDD Image',
+    description: 'Required for xemu (8GB hard disk image)',
+    platform: 'xbox',
+    required: true,
+    filenames: ['xbox_hdd.qcow2']
   }
 ]
 
