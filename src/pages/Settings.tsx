@@ -1121,7 +1121,7 @@ function BiosSettings({ isFocused, focusedRow, focusedCol: _focusedCol, onFocusC
 
   const handleBrowse = async (biosId: string) => {
     const path = await window.electronAPI.dialog.openFile([
-      { name: 'BIOS Files', extensions: ['bin', 'rom', 'BIN', 'ROM'] }
+      { name: 'BIOS Files', extensions: ['bin', 'rom', 'qcow2', 'img', 'iso'] }
     ])
     if (path) {
       const updatedStatus = await window.electronAPI.bios.setPath(biosId, path)
