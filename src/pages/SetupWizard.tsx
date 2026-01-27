@@ -388,6 +388,8 @@ function MissingStep() {
       ps2: 'PS2',
       ps3: 'PS3',
       psp: 'PSP',
+      xbox: 'Xbox',
+      xbox360: 'Xbox 360',
       arcade: 'Arcade'
     }
     return platforms.map(p => platformNames[p] || p).join(' / ')

@@ -48,6 +48,7 @@ export interface EmulatorDefinition {
   launchArgs: (romPath: string, ctx?: LaunchContext) => string[]
   canInstall: boolean
   downloadUrl?: string
+  supportsVersion?: boolean  // Set to false for emulators that don't support --version flag
 }
 
 // RetroArch platform → core name (no extension). We try {retroarch}/cores/ first (Windows
@@ -105,14 +106,14 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
       ]
     },
     launchArgs: (romPath: string, ctx?: LaunchContext) => {
-      if (!ctx) return ['-L', 'auto', romPath]
+      if (!ctx) return ['--fullscreen', '-L', 'auto', romPath]
       const coreName = RETROARCH_CORE_BY_PLATFORM[ctx.platform]
-      if (!coreName) return ['-L', 'auto', romPath]
+      if (!coreName) return ['--fullscreen', '-L', 'auto', romPath]
       const ext = getRetroArchCoreExt()
       const coresDir = path.join(path.dirname(ctx.emulatorPath), 'cores')
       const corePath = path.join(coresDir, coreName + ext)
-      if (!fs.existsSync(corePath)) return ['-L', 'auto', romPath]
-      return ['-L', corePath, romPath]
+      if (!fs.existsSync(corePath)) return ['--fullscreen', '-L', 'auto', romPath]
+      return ['--fullscreen', '-L', corePath, romPath]
     },
     canInstall: true,
     downloadUrl: 'https://www.retroarch.com/?page=platforms'
@@ -147,7 +148,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/org.DolphinEmu.dolphin-emu/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => ['-e', romPath],
+    launchArgs: (romPath: string) => ['-b', '-e', romPath],
     canInstall: true,
     downloadUrl: 'https://dolphin-emu.org/download/'
   },
@@ -178,7 +179,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/org.duckstation.DuckStation/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => ['-batch', romPath],
+    launchArgs: (romPath: string) => ['-batch', '-fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://github.com/stenzek/duckstation/releases'
   },
@@ -210,7 +211,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/net.pcsx2.PCSX2/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => ['-batch', romPath],
+    launchArgs: (romPath: string) => ['-batch', '-fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://pcsx2.net/downloads/'
   },
@@ -240,7 +241,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '~/Applications'
       ]
     },
-    launchArgs: (romPath: string) => ['--no-gui', romPath],
+    launchArgs: (romPath: string) => ['--no-gui', '--fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://rpcs3.net/download'
   },
@@ -270,7 +271,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '~/Applications'
       ]
     },
-    launchArgs: (romPath: string) => [romPath],
+    launchArgs: (romPath: string) => ['--fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://github.com/GreemDev/Ryubing/releases'
   },
@@ -301,9 +302,84 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/org.ppsspp.PPSSPP/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => [romPath],
+    launchArgs: (romPath: string) => ['--fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://www.ppsspp.org/downloads.html'
+  },
+  {
+    id: 'xenia',
+    name: 'Xenia',
+    executable: 'xenia.exe',
+    platforms: ['xbox360'],
+    defaultPaths: {
+      win32: [
+        'C:\\xenia',
+        'C:\\Program Files\\Xenia',
+        '%USERPROFILE%\\Downloads\\xenia',
+        '%USERPROFILE%\\Downloads',
+        '%LOCALAPPDATA%\\Programs\\Xenia'
+      ],
+      darwin: [],
+      linux: []
+    },
+    launchArgs: (romPath: string) => ['--fullscreen', romPath],
+    canInstall: true,
+    downloadUrl: 'https://xenia.jp/download/',
+    supportsVersion: false
+  },
+  {
+    id: 'xenia_canary',
+    name: 'Xenia Canary',
+    executable: 'xenia_canary.exe',
+    platforms: ['xbox360'],
+    defaultPaths: {
+      win32: [
+        'C:\\xenia_canary',
+        'C:\\xenia-canary',
+        '%USERPROFILE%\\Downloads\\xenia_canary',
+        '%USERPROFILE%\\Downloads\\xenia-canary',
+        '%USERPROFILE%\\Downloads'
+      ],
+      darwin: [],
+      linux: []
+    },
+    launchArgs: (romPath: string) => ['--fullscreen', romPath],
+    canInstall: true,
+    downloadUrl: 'https://github.com/xenia-canary/xenia-canary/releases',
+    supportsVersion: false
+  },
+  {
+    id: 'xemu',
+    name: 'xemu',
+    executable: process.platform === 'win32' ? 'xemu.exe' : 'xemu',
+    platforms: ['xbox'],
+    defaultPaths: {
+      win32: [
+        'C:\\Program Files\\xemu',
+        'C:\\xemu',
+        '%USERPROFILE%\\Downloads\\xemu',
+        '%USERPROFILE%\\Downloads',
+        '%LOCALAPPDATA%\\Programs\\xemu'
+      ],
+      darwin: [
+        '/Applications/xemu.app/Contents/MacOS',
+        '/opt/homebrew/bin',
+        '/usr/local/bin'
+      ],
+      linux: [
+        '/usr/bin',
+        '/usr/local/bin',
+        '~/.local/bin',
+        '/snap/bin',
+        '~/bin',
+        '~/Applications',
+        '/var/lib/flatpak/app/app.xemu.xemu/current/active/files/bin'
+      ]
+    },
+    launchArgs: (romPath: string) => ['-full-screen', '-dvd_path', romPath],
+    canInstall: true,
+    downloadUrl: 'https://xemu.app/#download',
+    supportsVersion: false
   }
 ]
 
@@ -568,6 +644,8 @@ export function registerEmulatorHandlers(): void {
     if (!def) return 'Unknown'
     const emulatorPath = detectEmulator(def)
     if (!emulatorPath) return 'Unknown'
+    // Skip version check for emulators that don't support --version flag
+    if (def.supportsVersion === false) return 'Installed'
     return new Promise(resolve => {
       let settled = false
       const finish = (v: string) => {

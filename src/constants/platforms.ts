@@ -154,6 +154,14 @@ export const PLATFORMS: Platform[] = [
     emulators: ['xemu']
   },
   {
+    id: 'xbox360',
+    name: 'Xbox 360',
+    shortName: 'X360',
+    icon: '🎮',
+    extensions: ['.iso', '.xex'],
+    emulators: ['xenia', 'xenia_canary']
+  },
+  {
     id: 'arcade',
     name: 'Arcade',
     shortName: 'Arcade',
