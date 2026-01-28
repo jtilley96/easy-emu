@@ -5,8 +5,7 @@ import {
   Gamepad2,
   Settings,
   Clock,
-  Star,
-  FolderOpen
+  Star
 } from 'lucide-react'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 import { useLayoutContext } from './Layout'
@@ -19,7 +18,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/', icon: <Library size={20} />, label: 'Library' },
-  { to: '/systems', icon: <FolderOpen size={20} />, label: 'Systems' },
+  { to: '/systems', icon: <Gamepad2 size={20} />, label: 'Consoles' },
   { to: '/?filter=recent', icon: <Clock size={20} />, label: 'Recently Played' },
   { to: '/?filter=favorites', icon: <Star size={20} />, label: 'Favorites' },
   { to: '/settings', icon: <Settings size={20} />, label: 'Settings' }

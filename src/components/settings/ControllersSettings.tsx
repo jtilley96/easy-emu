@@ -41,10 +41,14 @@ const DEFAULT_HOTKEYS: Record<string, EmulatorHotkeyAction> = {
   F12: 'none'
 }
 
+const GRID_COLS = 2
+const GRID_ROWS = Math.ceil(FUNCTION_KEYS.length / GRID_COLS) // 6 rows of keys
+const TOTAL_ROWS = GRID_ROWS + 1 // +1 for reset button
+
 export default function ControllersSettings({
   isFocused,
   focusedRow,
-  focusedCol: _focusedCol,
+  focusedCol,
   onFocusChange,
   onGridChange,
   onBack,
@@ -57,9 +61,11 @@ export default function ControllersSettings({
   const [openDropdownKey, setOpenDropdownKey] = useState<string | null>(null)
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(0)
 
-  // Grid: 12 rows (F1-F12), 1 column each
+  // Grid: 6 rows of 2 F-keys + 1 row for reset button
   useEffect(() => {
-    onGridChange({ rows: FUNCTION_KEYS.length, cols: FUNCTION_KEYS.map(() => 1) })
+    const cols = Array(GRID_ROWS).fill(GRID_COLS) as number[]
+    cols.push(1) // reset button row
+    onGridChange({ rows: TOTAL_ROWS, cols })
   }, [onGridChange])
 
   // Load hotkeys from config
@@ -133,8 +139,15 @@ export default function ControllersSettings({
 
   const isDropdownOpen = openDropdownKey !== null
 
-  // Helper to check if row is focused
-  const isRowFocused = (row: number) => isFocused && focusedRow === row && !isDropdownOpen
+  // Map grid position to function key index
+  const getKeyIndex = (row: number, col: number) => row * GRID_COLS + col
+  const getKeyFromGrid = (row: number, col: number) => FUNCTION_KEYS[getKeyIndex(row, col)]
+
+  // Helper to check if a specific cell is focused
+  const isCellFocused = (row: number, col: number) =>
+    isFocused && focusedRow === row && focusedCol === col && !isDropdownOpen
+
+  const isResetFocused = isFocused && focusedRow === GRID_ROWS && !isDropdownOpen
 
   // Handle gamepad confirmation
   const handleConfirm = useCallback(() => {
@@ -145,11 +158,17 @@ export default function ControllersSettings({
       return
     }
 
-    const key = FUNCTION_KEYS[focusedRow]
+    // Reset button row
+    if (focusedRow === GRID_ROWS) {
+      handleResetDefaults()
+      return
+    }
+
+    const key = getKeyFromGrid(focusedRow, focusedCol)
     if (key) {
       openDropdown(key)
     }
-  }, [focusedRow, isDropdownOpen, confirmDropdownSelection, openDropdown, justActivatedRef])
+  }, [focusedRow, focusedCol, isDropdownOpen, confirmDropdownSelection, openDropdown, justActivatedRef])
 
   // Handle back button
   const handleBackButton = useCallback(() => {
@@ -174,17 +193,24 @@ export default function ControllersSettings({
       }
 
       if (direction === 'up') {
-        if (focusedRow === 0) {
-          onBack()
-        } else {
-          onFocusChange(focusedRow - 1, 0)
+        if (focusedRow > 0) {
+          onFocusChange(focusedRow - 1, Math.min(focusedCol, focusedRow - 1 < GRID_ROWS ? GRID_COLS - 1 : 0))
         }
       } else if (direction === 'down') {
-        if (focusedRow < FUNCTION_KEYS.length - 1) {
-          onFocusChange(focusedRow + 1, 0)
+        if (focusedRow < TOTAL_ROWS - 1) {
+          onFocusChange(focusedRow + 1, Math.min(focusedCol, focusedRow + 1 < GRID_ROWS ? GRID_COLS - 1 : 0))
         }
       } else if (direction === 'left') {
-        onBack()
+        if (focusedCol > 0) {
+          onFocusChange(focusedRow, focusedCol - 1)
+        } else {
+          onBack()
+        }
+      } else if (direction === 'right') {
+        const maxCol = focusedRow < GRID_ROWS ? GRID_COLS - 1 : 0
+        if (focusedCol < maxCol) {
+          onFocusChange(focusedRow, focusedCol + 1)
+        }
       }
     },
     onConfirm: handleConfirm,
@@ -202,44 +228,48 @@ export default function ControllersSettings({
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Controller & Hotkey Settings</h2>
+      <h2 className="text-2xl font-bold mb-6">Hotkeys</h2>
 
       <section className="mb-8">
         <div className="flex items-center gap-3 mb-4">
           <Keyboard size={20} className="text-accent" />
-          <h3 className="text-lg font-semibold">Emulator Hotkeys</h3>
+          <h3 className="text-lg font-semibold">Keyboard Shortcuts</h3>
         </div>
         <p className="text-surface-400 text-sm mb-4">
           Configure keyboard shortcuts (F1-F12) for emulator actions during gameplay.
-          These hotkeys work alongside the gamepad menu (Select button).
+          Click any key to change its action.
         </p>
 
-        <div className="space-y-2">
-          {FUNCTION_KEYS.map((key, index) => {
-            const currentAction = hotkeys[key] || 'none'
-            const currentOption = HOTKEY_OPTIONS.find(o => o.value === currentAction)
-            const isThisRowFocused = isRowFocused(index)
-            const isThisDropdownOpen = openDropdownKey === key
+        <div className="bg-surface-800 rounded-lg p-4">
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {FUNCTION_KEYS.map((key, index) => {
+              const gridRow = Math.floor(index / GRID_COLS)
+              const gridCol = index % GRID_COLS
+              const currentAction = hotkeys[key] || 'none'
+              const currentOption = HOTKEY_OPTIONS.find(o => o.value === currentAction)
+              const focused = isCellFocused(gridRow, gridCol)
+              const isThisDropdownOpen = openDropdownKey === key
 
-            return (
-              <div
-                key={key}
-                data-focus-row={index}
-                data-focus-col={0}
-                className={`bg-surface-800 rounded-lg px-4 py-3 transition-all ${
-                  isThisRowFocused || isThisDropdownOpen ? 'ring-2 ring-accent' : ''
-                } ${isThisRowFocused ? 'scale-[1.01]' : ''}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <kbd className="px-3 py-1 bg-surface-900 border border-surface-600 rounded font-mono text-sm min-w-[50px] text-center">
+              return (
+                <div key={key} className="relative">
+                  <div
+                    data-focus-row={gridRow}
+                    data-focus-col={gridCol}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-all ${
+                      focused ? 'bg-surface-700 ring-2 ring-accent' : 'hover:bg-surface-700'
+                    }`}
+                    onClick={() => openDropdown(key)}
+                  >
+                    <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs min-w-[40px] text-center">
                       {key}
                     </kbd>
-                    <span className="text-surface-300 text-sm">=</span>
+                    <span className={`${currentAction === 'none' ? 'text-surface-500' : 'text-surface-300'}`}>
+                      {currentOption?.label || 'None'}
+                    </span>
                   </div>
 
-                  {isThisDropdownOpen ? (
-                    <div className="flex-1 ml-4 bg-surface-900 border border-accent rounded overflow-hidden">
+                  {isThisDropdownOpen && (
+                    <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-surface-900 border border-accent rounded overflow-hidden shadow-xl">
                       {HOTKEY_OPTIONS.map((option, optIndex) => (
                         <div
                           key={option.value}
@@ -260,94 +290,27 @@ export default function ControllersSettings({
                         </div>
                       ))}
                     </div>
-                  ) : isThisRowFocused ? (
-                    <div
-                      className="flex-1 ml-4 flex items-center justify-between bg-surface-900 border border-accent rounded px-3 py-2 cursor-pointer"
-                      onClick={() => openDropdown(key)}
-                    >
-                      <div>
-                        <span className="font-medium text-sm">{currentOption?.label || 'None'}</span>
-                        <span className="text-surface-400 text-xs ml-2">{currentOption?.description}</span>
-                      </div>
-                      <span className="text-accent text-xs">Press A</span>
-                    </div>
-                  ) : (
-                    <select
-                      value={currentAction}
-                      onChange={(e) => handleHotkeyChange(key, e.target.value as EmulatorHotkeyAction)}
-                      className="flex-1 ml-4 bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm"
-                    >
-                      {HOTKEY_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label} - {option.description}
-                        </option>
-                      ))}
-                    </select>
                   )}
                 </div>
-              </div>
-            )
-          })}
-        </div>
-
-        <div className="mt-4 flex gap-3">
-          <button
-            onClick={handleResetDefaults}
-            className="px-4 py-2 bg-surface-700 hover:bg-surface-600 rounded-lg text-sm transition-colors"
-          >
-            Reset to Defaults
-          </button>
-        </div>
-      </section>
-
-      <section className="mb-8">
-        <h3 className="text-lg font-semibold mb-4">Default Hotkey Reference</h3>
-        <div className="bg-surface-800 rounded-lg p-4">
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F1</kbd>
-              <span className="text-surface-400">Quick Save</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F2</kbd>
-              <span className="text-surface-400">Quick Load</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F3</kbd>
-              <span className="text-surface-400">Screenshot</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F4</kbd>
-              <span className="text-surface-400">Fast Forward</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F5</kbd>
-              <span className="text-surface-400">Save State (Dialog)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F6</kbd>
-              <span className="text-surface-400">Load State (Dialog)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F7</kbd>
-              <span className="text-surface-400">Rewind</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F8</kbd>
-              <span className="text-surface-400">Pause</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F9</kbd>
-              <span className="text-surface-400">Mute</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="px-2 py-0.5 bg-surface-900 border border-surface-600 rounded font-mono text-xs">F10</kbd>
-              <span className="text-surface-400">Fullscreen</span>
-            </div>
+              )
+            })}
           </div>
-          <p className="text-surface-500 text-xs mt-3">
-            Note: <kbd className="px-1 bg-surface-900 border border-surface-600 rounded font-mono text-xs">Escape</kbd> always exits the game, and <kbd className="px-1 bg-surface-900 border border-surface-600 rounded font-mono text-xs">P</kbd> toggles pause.
-          </p>
+
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-surface-500 text-xs">
+              <kbd className="px-1 bg-surface-900 border border-surface-600 rounded font-mono text-xs">Escape</kbd> always exits the game. <kbd className="px-1 bg-surface-900 border border-surface-600 rounded font-mono text-xs">P</kbd> toggles pause.
+            </p>
+            <button
+              data-focus-row={GRID_ROWS}
+              data-focus-col={0}
+              onClick={handleResetDefaults}
+              className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                isResetFocused ? 'bg-surface-600 ring-2 ring-accent' : 'bg-surface-700 hover:bg-surface-600'
+              }`}
+            >
+              Reset to Defaults
+            </button>
+          </div>
         </div>
       </section>
 

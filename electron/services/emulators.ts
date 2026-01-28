@@ -47,6 +47,7 @@ export interface EmulatorDefinition {
   launchArgs: (romPath: string, ctx?: LaunchContext) => string[]
   canInstall: boolean
   downloadUrl?: string
+  noVersionCheck?: boolean
 }
 
 // RetroArch platform → core name (no extension). We try {retroarch}/cores/ first (Windows
@@ -303,6 +304,58 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
     launchArgs: (romPath: string) => [romPath],
     canInstall: true,
     downloadUrl: 'https://www.ppsspp.org/downloads.html'
+  },
+  {
+    id: 'xemu',
+    name: 'xemu',
+    executable: process.platform === 'win32' ? 'xemu.exe' : 'xemu',
+    platforms: ['xbox'],
+    defaultPaths: {
+      win32: [
+        'C:\\Program Files\\xemu',
+        'C:\\xemu',
+        '%LOCALAPPDATA%\\Programs\\xemu',
+        '%USERPROFILE%\\scoop\\apps\\xemu\\current'
+      ],
+      darwin: [
+        '/Applications/xemu.app/Contents/MacOS',
+        '/opt/homebrew/bin',
+        '/usr/local/bin'
+      ],
+      linux: [
+        '/usr/bin',
+        '/usr/local/bin',
+        '~/.local/bin',
+        '/snap/bin',
+        '~/bin',
+        '~/Applications',
+        '/var/lib/flatpak/app/app.xemu.xemu/current/active/files/bin'
+      ]
+    },
+    launchArgs: (romPath: string) => ['-dvd_path', romPath],
+    canInstall: true,
+    downloadUrl: 'https://xemu.app/#download',
+    noVersionCheck: true
+  },
+  {
+    id: 'xenia',
+    name: 'Xenia',
+    executable: process.platform === 'win32' ? 'xenia.exe' : 'xenia',
+    platforms: ['xbox360'],
+    defaultPaths: {
+      win32: [
+        'C:\\Program Files\\Xenia',
+        'C:\\Xenia',
+        '%LOCALAPPDATA%\\Programs\\Xenia',
+        '%USERPROFILE%\\scoop\\apps\\xenia\\current'
+      ],
+      darwin: [],
+      linux: []
+    },
+    launchArgs: (romPath: string) => [romPath],
+    canInstall: true,
+    downloadUrl: 'https://xenia.jp/download/',
+    noVersionCheck: true
   }
 ]
 
@@ -552,6 +605,7 @@ export function registerEmulatorHandlers(): void {
   ipcMain.handle('emulators:getVersion', async (_event, emulatorId: string): Promise<string> => {
     const def = EMULATOR_DEFINITIONS.find(d => d.id === emulatorId)
     if (!def) return 'Unknown'
+    if (def.noVersionCheck) return 'Installed'
     const emulatorPath = detectEmulator(def)
     if (!emulatorPath) return 'Unknown'
     return new Promise(resolve => {

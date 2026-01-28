@@ -133,9 +133,7 @@ export default function CoreManagerSection({ isFocused, focusedRow, focusedCol: 
     enabled: isFocused,
     onNavigate: (direction) => {
       if (direction === 'up') {
-        if (focusedRow === 0) {
-          onBack()
-        } else {
+        if (focusedRow > 0) {
           onFocusChange(focusedRow - 1, 0)
         }
       } else if (direction === 'down') {

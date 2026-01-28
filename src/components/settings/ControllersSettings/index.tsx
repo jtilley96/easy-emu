@@ -84,9 +84,7 @@ export default function ControllersSettings({ isFocused, focusedRow, focusedCol:
     enabled: isFocused && !showProfileEditor,
     onNavigate: (direction) => {
       if (direction === 'up') {
-        if (focusedRow === 0) {
-          onBack()
-        } else {
+        if (focusedRow > 0) {
           onFocusChange(focusedRow - 1, 0)
         }
       } else if (direction === 'down') {

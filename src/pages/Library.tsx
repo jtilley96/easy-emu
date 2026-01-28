@@ -130,17 +130,13 @@ export default function Library() {
     setHeaderFocusIndex(-1)
   }, [filteredGames.length])
 
-  // Calculate columns based on viewport width
+  // Calculate columns from actual rendered CSS grid
   const getColumns = useCallback(() => {
     if (!gridRef.current) return 6 // default
-    const width = gridRef.current.offsetWidth
-    // Match Tailwind breakpoints: 2, 3, 4, 5, 6, 8
-    if (width >= 1536) return 8 // 2xl
-    if (width >= 1280) return 6 // xl
-    if (width >= 1024) return 5 // lg
-    if (width >= 768) return 4  // md
-    if (width >= 640) return 3  // sm
-    return 2 // default
+    const style = getComputedStyle(gridRef.current)
+    const templateColumns = style.gridTemplateColumns
+    if (!templateColumns) return 6
+    return templateColumns.split(' ').length
   }, [])
 
   // Get platform options for dropdown
@@ -236,16 +232,19 @@ export default function Library() {
         switch (direction) {
           case 'left':
             if (focusedIndex % columns === 0) {
-              // At start of row - return focus to sidebar
+              // At start of any row - return focus to sidebar
               shouldMoveToSidebar = true
               return focusedIndex
             }
             newIdx = focusedIndex - 1
             break
           case 'right':
-            if ((focusedIndex + 1) % columns === 0 || focusedIndex === totalGames - 1) {
-              // At end of row or last item - wrap to start of next row
-              newIdx = focusedIndex < totalGames - 1 ? focusedIndex + 1 : 0
+            if (focusedIndex === totalGames - 1) {
+              // At last item - stay put
+              newIdx = focusedIndex
+            } else if ((focusedIndex + 1) % columns === 0) {
+              // At end of row - wrap to start of next row
+              newIdx = focusedIndex + 1
             } else {
               newIdx = focusedIndex + 1
             }
@@ -263,7 +262,7 @@ export default function Library() {
             if (focusedIndex + columns < totalGames) {
               newIdx = focusedIndex + columns
             } else {
-              // At bottom row - wrap to top
+              // At bottom row - wrap to top of same column
               const targetCol = focusedIndex % columns
               newIdx = Math.min(targetCol, totalGames - 1)
             }
