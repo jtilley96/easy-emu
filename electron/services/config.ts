@@ -57,7 +57,7 @@ function getDefaultConfig(): AppConfig {
     emulatorEnabled: {},
     biosPaths: {},
     savesPath: path.join(userData, 'saves'),
-    statesPath: path.join(userData, 'states'),
+    statesPath: path.join(userData, 'saves', 'states'),
     screenshotsPath: path.join(userData, 'screenshots'),
     coversPath: path.join(userData, 'covers'),
     autoScrape: false,

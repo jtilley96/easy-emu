@@ -127,7 +127,12 @@ export default function Library() {
   // Reset focus when games change
   useEffect(() => {
     setFocusedIndex(0)
-    setHeaderFocusIndex(-1)
+    // If no results, keep focus on the search bar so the user can modify their query
+    if (filteredGames.length === 0) {
+      setHeaderFocusIndex(0)
+    } else {
+      setHeaderFocusIndex(-1)
+    }
   }, [filteredGames.length])
 
   // Calculate columns from actual rendered CSS grid
