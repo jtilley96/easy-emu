@@ -2,47 +2,28 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FolderOpen,
-  HardDrive,
-  Gamepad2,
   Database,
   Download,
-  Sliders,
+  Keyboard,
   Info,
   Plus,
   Trash2,
   RefreshCw,
   ExternalLink,
-  Check,
-  X,
-  AlertCircle,
   Loader2,
-  Settings2,
-  XCircle,
-  Cpu,
   Sparkles
 } from 'lucide-react'
 import { PLATFORMS } from '../constants/platforms'
 import { useAppStore } from '../store/appStore'
 import { useLibraryStore } from '../store/libraryStore'
 import { useUIStore } from '../store/uiStore'
-import CoreManagerSection from '../components/settings/CoreManagerSection'
 import ControllersSettings from '../components/settings/ControllersSettings'
-import { EmulatorInfo, UpdateInfo, UpdateDownloadProgress } from '../types'
+import { UpdateInfo, UpdateDownloadProgress } from '../types'
 import { useGamepadNavigation } from '../hooks/useGamepadNavigation'
 import { useLayoutContext } from '../components/Layout'
 import { SettingsSectionProps } from '../types'
 
-interface BiosStatus {
-  id: string
-  name: string
-  description: string
-  platform: string
-  required: boolean
-  found: boolean
-  path: string | null
-}
-
-type SettingsSection = 'library' | 'emulators' | 'cores' | 'bios' | 'paths' | 'metadata' | 'controllers' | 'general'
+type SettingsSection = 'library' | 'paths' | 'metadata' | 'controllers' | 'general'
 
 interface NavItem {
   id: SettingsSection
@@ -51,20 +32,17 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { id: 'general', label: 'General', icon: <Info size={18} /> },
   { id: 'library', label: 'Library', icon: <FolderOpen size={18} /> },
-  { id: 'emulators', label: 'Emulators', icon: <Gamepad2 size={18} /> },
-  { id: 'cores', label: 'Embedded Cores', icon: <Cpu size={18} /> },
-  { id: 'bios', label: 'BIOS Files', icon: <HardDrive size={18} /> },
   { id: 'paths', label: 'Paths', icon: <Database size={18} /> },
   { id: 'metadata', label: 'Metadata', icon: <Sparkles size={18} /> },
-  { id: 'controllers', label: 'Controllers', icon: <Sliders size={18} /> },
-  { id: 'general', label: 'General', icon: <Info size={18} /> }
+  { id: 'controllers', label: 'Hotkeys', icon: <Keyboard size={18} /> }
 ]
 
 export default function Settings() {
   const { section } = useParams<{ section?: string }>()
   const navigate = useNavigate()
-  const currentSection = (section as SettingsSection) || 'library'
+  const currentSection = (section as SettingsSection) || 'general'
   const { isSidebarFocused, setIsSidebarFocused } = useLayoutContext()
   const [focusedSectionIndex, setFocusedSectionIndex] = useState(0)
   const [isSectionListFocused, setIsSectionListFocused] = useState(true)
@@ -276,9 +254,6 @@ export default function Settings() {
       {/* Settings Content */}
       <div ref={contentScrollRef} className="flex-1 overflow-auto p-6">
         {currentSection === 'library' && <LibrarySettings {...sectionProps} />}
-        {currentSection === 'emulators' && <EmulatorsSettings {...sectionProps} />}
-        {currentSection === 'cores' && <CoreManagerSection {...sectionProps} />}
-        {currentSection === 'bios' && <BiosSettings {...sectionProps} />}
         {currentSection === 'paths' && <PathsSettings {...sectionProps} />}
         {currentSection === 'metadata' && <MetadataSettings {...sectionProps} />}
         {currentSection === 'controllers' && <ControllersSettings {...sectionProps} />}
@@ -364,9 +339,7 @@ function LibrarySettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
     const maxColInRow = grid.cols[focusedRow] - 1
 
     if (direction === 'up') {
-      if (focusedRow === 0) {
-        onBack()
-      } else {
+      if (focusedRow > 0) {
         // Move up, clamp column to new row's max
         const newRow = focusedRow - 1
         const newMaxCol = grid.cols[newRow] - 1
@@ -500,746 +473,6 @@ function LibrarySettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
   )
 }
 
-// Emulators Settings Section
-function EmulatorsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
-  const [emulators, setEmulators] = useState<EmulatorInfo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [versionCache, setVersionCache] = useState<Record<string, string>>({})
-  const [defaults, setDefaults] = useState<Record<string, string>>({})
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({})
-  const { addToast } = useUIStore()
-  const refreshPlatformsWithEmulator = useLibraryStore(s => s.refreshPlatformsWithEmulator)
-  
-  // Platform selector dropdown state
-  const [openPlatformId, setOpenPlatformId] = useState<string | null>(null)
-  const [selectedOptionIndex, setSelectedOptionIndex] = useState(0)
-  
-  // Platform grid layout - 3 columns on large screens
-  const PLATFORM_GRID_COLS = 3
-  const platformCount = PLATFORMS.length
-
-  // Navigation layout (using row for section, col for position within section):
-  // Row 0: Platform grid (col = platform index within grid) - NES is first
-  // Row 1 to N: Emulator cards (col = button index within card)
-  // Row N+1: Re-detect button (at the end)
-  const emulatorStartRow = 1
-  const redetectRow = emulatorStartRow + emulators.length
-  const itemCount = redetectRow + 1
-
-  useEffect(() => {
-    // Col count: row 0 = platformCount, row 1 to N = 1 each (emulators), last row = 1 (redetect)
-    const cols = [platformCount, ...Array(emulators.length).fill(1), 1]
-    onGridChange({ rows: itemCount, cols })
-  }, [itemCount, platformCount, emulators.length, onGridChange])
-
-  // Get current section info
-  const getCurrentSection = () => {
-    if (focusedRow === 0) return 'platforms'
-    if (focusedRow === redetectRow) return 'redetect'
-    return 'emulators'
-  }
-
-  const currentSection = getCurrentSection()
-  const focusedPlatformIndex = currentSection === 'platforms' ? focusedCol : -1
-  const focusedEmulatorIndex = currentSection === 'emulators' ? focusedRow - emulatorStartRow : -1
-  const focusedEmulator = focusedEmulatorIndex >= 0 ? emulators[focusedEmulatorIndex] : null
-  
-  // Check if we're in dropdown selection mode
-  const isDropdownOpen = openPlatformId !== null
-
-  const loadEmulators = async () => {
-    setLoading(true)
-    try {
-      const results = await window.electronAPI.emulators.detect()
-      setEmulators(results)
-    } catch (error) {
-      console.error('Failed to detect emulators:', error)
-      addToast('error', 'Failed to detect emulators')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadConfig = async () => {
-    try {
-      const config = (await window.electronAPI.config.getAll()) as Record<string, unknown>
-      setDefaults((config.defaultEmulatorPerPlatform as Record<string, string>) || {})
-      setEnabled((config.emulatorEnabled as Record<string, boolean>) || {})
-    } catch (e) {
-      console.error('Failed to load config', e)
-    }
-  }
-
-  useEffect(() => {
-    loadEmulators()
-    loadConfig()
-  }, [])
-
-  useEffect(() => {
-    emulators.filter(e => e.installed).forEach(emu => {
-      if (versionCache[emu.id] !== undefined) return
-      window.electronAPI.emulators.getVersion(emu.id).then(v => {
-        setVersionCache(prev => ({ ...prev, [emu.id]: v }))
-      })
-    })
-  }, [emulators, versionCache])
-
-  const handleBrowse = async (emulatorId: string) => {
-    const path = await window.electronAPI.dialog.openFile([
-      { name: 'Executable', extensions: ['exe', 'app', ''] }
-    ])
-    if (path) {
-      await window.electronAPI.emulators.configure(emulatorId, { path })
-      await loadEmulators()
-      await refreshPlatformsWithEmulator()
-      setVersionCache(prev => {
-        const next = { ...prev }
-        delete next[emulatorId]
-        return next
-      })
-      addToast('success', 'Emulator path updated')
-    }
-  }
-
-  const handleClear = async (emulatorId: string) => {
-    await window.electronAPI.emulators.configure(emulatorId, { clear: true })
-    await loadEmulators()
-    await refreshPlatformsWithEmulator()
-    setVersionCache(prev => {
-      const next = { ...prev }
-      delete next[emulatorId]
-      return next
-    })
-    addToast('success', 'Path cleared')
-  }
-
-  const handleDownload = (url: string) => {
-    window.electronAPI.shell.openExternal(url)
-  }
-
-  const handleEnabledChange = async (emulatorId: string, value: boolean) => {
-    const next = { ...enabled, [emulatorId]: value }
-    setEnabled(next)
-    await window.electronAPI.config.set('emulatorEnabled', next)
-    await refreshPlatformsWithEmulator()
-    addToast('success', value ? 'Emulator enabled' : 'Emulator disabled')
-  }
-
-  const handleOpenSettings = async (emulatorId: string) => {
-    try {
-      await window.electronAPI.emulators.openSettings(emulatorId)
-    } catch (e) {
-      addToast('error', 'Failed to open emulator settings')
-    }
-  }
-
-  const handleDefaultChange = async (platformId: string, emulatorId: string) => {
-    const value = emulatorId === '' ? undefined : emulatorId
-    const next = value ? { ...defaults, [platformId]: value } : (() => {
-      const o = { ...defaults }
-      delete o[platformId]
-      return o
-    })()
-    setDefaults(next)
-    await window.electronAPI.config.set('defaultEmulatorPerPlatform', next)
-    addToast('success', 'Default emulator updated')
-  }
-
-  const getPlatformNames = (platforms: string[]): string => {
-    return platforms.map(p => PLATFORMS.find(x => x.id === p)?.shortName ?? p).join(', ')
-  }
-
-  const installedForPlatform = (platformId: string) =>
-    emulators.filter(
-      e => e.installed && (enabled[e.id] !== false) && e.platforms.includes(platformId)
-    )
-
-  // Helper to check if a section/item is focused
-  const isRedetectFocused = () => isFocused && focusedRow === redetectRow && !isDropdownOpen
-  const isPlatformFocused = (platformIndex: number) => isFocused && focusedRow === 0 && focusedCol === platformIndex && !isDropdownOpen
-  const isEmulatorFocused = (emulatorIndex: number) => isFocused && focusedRow === emulatorStartRow + emulatorIndex && !isDropdownOpen
-  const isEmulatorButtonFocused = (emulatorIndex: number, buttonIndex: number) => 
-    isEmulatorFocused(emulatorIndex) && focusedCol === buttonIndex
-  
-  // Get available buttons for an emulator (returns array of button types)
-  const getEmulatorButtons = useCallback((emu: EmulatorInfo): ('browse' | 'clear' | 'settings' | 'download')[] => {
-    const buttons: ('browse' | 'clear' | 'settings' | 'download')[] = ['browse']
-    if (emu.path) buttons.push('clear')
-    if (emu.installed) buttons.push('settings')
-    if (!emu.installed && emu.downloadUrl) buttons.push('download')
-    return buttons
-  }, [])
-
-  // Get options for a platform (with "Default" as first option)
-  const getOptionsForPlatform = useCallback((platformId: string) => {
-    const emus = installedForPlatform(platformId)
-    return [
-      { id: '', name: 'Default (first installed)' },
-      ...emus.map(e => ({ id: e.id, name: e.name }))
-    ]
-  }, [emulators, enabled])
-
-  // Open dropdown for a platform
-  const openDropdown = useCallback((platformId: string) => {
-    const options = getOptionsForPlatform(platformId)
-    const currentValue = defaults[platformId] ?? ''
-    const currentIndex = options.findIndex(o => o.id === currentValue)
-    setOpenPlatformId(platformId)
-    setSelectedOptionIndex(currentIndex >= 0 ? currentIndex : 0)
-  }, [defaults, getOptionsForPlatform])
-
-  // Close dropdown without saving
-  const closeDropdown = useCallback(() => {
-    setOpenPlatformId(null)
-    setSelectedOptionIndex(0)
-  }, [])
-
-  // Confirm dropdown selection
-  const confirmDropdownSelection = useCallback(() => {
-    if (!openPlatformId) return
-    const options = getOptionsForPlatform(openPlatformId)
-    const selectedOption = options[selectedOptionIndex]
-    if (selectedOption) {
-      handleDefaultChange(openPlatformId, selectedOption.id)
-    }
-    closeDropdown()
-  }, [openPlatformId, selectedOptionIndex, getOptionsForPlatform, closeDropdown])
-
-  // Handle gamepad confirmation
-  const handleConfirm = useCallback(() => {
-    // Ignore if we just activated (prevents double-activation from held A button)
-    if (justActivatedRef.current) return
-    
-    // If dropdown is open, confirm selection
-    if (isDropdownOpen) {
-      confirmDropdownSelection()
-      return
-    }
-    
-    if (currentSection === 'redetect') {
-      loadEmulators()
-      loadConfig()
-      refreshPlatformsWithEmulator()
-    } else if (currentSection === 'platforms') {
-      const platform = PLATFORMS[focusedPlatformIndex]
-      if (platform) {
-        openDropdown(platform.id)
-      }
-    } else if (focusedEmulator) {
-      // Get the buttons for this emulator and execute the focused one
-      const buttons = getEmulatorButtons(focusedEmulator)
-      const buttonType = buttons[focusedCol] || 'browse'
-      
-      switch (buttonType) {
-        case 'browse':
-          handleBrowse(focusedEmulator.id)
-          break
-        case 'clear':
-          handleClear(focusedEmulator.id)
-          break
-        case 'settings':
-          handleOpenSettings(focusedEmulator.id)
-          break
-        case 'download':
-          if (focusedEmulator.downloadUrl) {
-            handleDownload(focusedEmulator.downloadUrl)
-          }
-          break
-      }
-    }
-  }, [currentSection, focusedPlatformIndex, focusedEmulator, focusedCol, refreshPlatformsWithEmulator, justActivatedRef, isDropdownOpen, confirmDropdownSelection, openDropdown, getEmulatorButtons])
-
-  // Handle back button
-  const handleBackButton = useCallback(() => {
-    if (isDropdownOpen) {
-      closeDropdown()
-    } else {
-      onBack()
-    }
-  }, [isDropdownOpen, closeDropdown, onBack])
-
-  // Gamepad navigation
-  useGamepadNavigation({
-    enabled: isFocused,
-    onNavigate: (direction) => {
-      // If dropdown is open, navigate within dropdown
-      if (isDropdownOpen && openPlatformId) {
-        const options = getOptionsForPlatform(openPlatformId)
-        if (direction === 'up') {
-          setSelectedOptionIndex(prev => Math.max(0, prev - 1))
-        } else if (direction === 'down') {
-          setSelectedOptionIndex(prev => Math.min(options.length - 1, prev + 1))
-        }
-        return
-      }
-      
-      // Grid navigation for platforms section (row 0)
-      if (currentSection === 'platforms') {
-        const currentGridRow = Math.floor(focusedCol / PLATFORM_GRID_COLS)
-        const currentGridCol = focusedCol % PLATFORM_GRID_COLS
-
-        if (direction === 'up') {
-          if (currentGridRow === 0) {
-            // At top of platforms - go back to section list
-            onBack()
-          } else {
-            // Move up one row in grid
-            const newIndex = (currentGridRow - 1) * PLATFORM_GRID_COLS + currentGridCol
-            onFocusChange(0, Math.min(newIndex, platformCount - 1))
-          }
-        } else if (direction === 'down') {
-          const newGridRow = currentGridRow + 1
-          const newIndex = newGridRow * PLATFORM_GRID_COLS + currentGridCol
-          if (newIndex < platformCount) {
-            // Move down one row in grid
-            onFocusChange(0, newIndex)
-          } else {
-            // Move to emulators section (or redetect if no emulators)
-            if (emulators.length > 0) {
-              onFocusChange(emulatorStartRow, 0)
-            } else {
-              onFocusChange(redetectRow, 0)
-            }
-          }
-        } else if (direction === 'left') {
-          if (currentGridCol === 0) {
-            // At left edge - go back
-            onBack()
-          } else {
-            // Move left in grid
-            onFocusChange(0, focusedCol - 1)
-          }
-        } else if (direction === 'right') {
-          if (focusedCol < platformCount - 1) {
-            // Move right in grid
-            onFocusChange(0, focusedCol + 1)
-          }
-        }
-        return
-      }
-
-      // Emulator section navigation (with left/right for buttons)
-      if (currentSection === 'emulators' && focusedEmulator) {
-        const buttons = getEmulatorButtons(focusedEmulator)
-        const maxCol = buttons.length - 1
-
-        if (direction === 'up') {
-          if (focusedRow === emulatorStartRow) {
-            // From first emulator, go to last row of platform grid
-            const lastPlatformIndex = platformCount - 1
-            onFocusChange(0, lastPlatformIndex)
-          } else {
-            onFocusChange(focusedRow - 1, 0)
-          }
-        } else if (direction === 'down') {
-          if (focusedRow < redetectRow) {
-            // Move to next emulator or redetect button
-            onFocusChange(focusedRow + 1, 0)
-          }
-        } else if (direction === 'left') {
-          if (focusedCol > 0) {
-            onFocusChange(focusedRow, focusedCol - 1)
-          } else {
-            onBack()
-          }
-        } else if (direction === 'right') {
-          if (focusedCol < maxCol) {
-            onFocusChange(focusedRow, focusedCol + 1)
-          }
-        }
-        return
-      }
-
-      // Navigation for redetect button (now at the end)
-      if (currentSection === 'redetect') {
-        if (direction === 'up') {
-          // Go to last emulator, or last platform if no emulators
-          if (emulators.length > 0) {
-            onFocusChange(redetectRow - 1, 0)
-          } else {
-            onFocusChange(0, platformCount - 1)
-          }
-        } else if (direction === 'left') {
-          onBack()
-        }
-        // Down does nothing - we're at the bottom
-      }
-    },
-    onConfirm: handleConfirm,
-    onBack: handleBackButton,
-    scrollRef
-  })
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold">Emulator Settings</h2>
-      </div>
-
-      {/* Default emulator per platform */}
-      <section className="mb-8">
-        <h3 className="text-lg font-semibold mb-4">Default emulator per platform</h3>
-        <p className="text-surface-400 text-sm mb-4">
-          Choose which emulator to use for each platform when a game has no specific override.
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {PLATFORMS.map((p, index) => {
-            const options = getOptionsForPlatform(p.id)
-            const isThisPlatformFocused = isPlatformFocused(index)
-            const isThisDropdownOpen = openPlatformId === p.id
-            const currentEmulator = defaults[p.id] ? options.find(e => e.id === defaults[p.id]) : null
-            const displayValue = currentEmulator?.name ?? 'Default (first installed)'
-            
-            return (
-              <div
-                key={p.id}
-                data-focus-row={0}
-                data-focus-col={index}
-                className={`bg-surface-800 rounded-lg px-4 py-3 transition-all relative ${
-                  isThisPlatformFocused || isThisDropdownOpen ? 'ring-2 ring-accent' : ''
-                } ${isThisPlatformFocused ? 'scale-[1.02]' : ''}`}
-              >
-                <label className="block text-sm font-medium mb-1">{p.shortName}</label>
-                
-                {isThisDropdownOpen ? (
-                  // Dropdown open - show options list
-                  <div className="bg-surface-900 border border-accent rounded overflow-hidden">
-                    {options.map((opt, optIndex) => (
-                      <div
-                        key={opt.id}
-                        className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
-                          optIndex === selectedOptionIndex
-                            ? 'bg-accent text-white'
-                            : 'hover:bg-surface-800'
-                        }`}
-                        onClick={() => {
-                          setSelectedOptionIndex(optIndex)
-                          handleDefaultChange(p.id, opt.id)
-                          closeDropdown()
-                        }}
-                      >
-                        {opt.name}
-                      </div>
-                    ))}
-                  </div>
-                ) : isThisPlatformFocused ? (
-                  // Gamepad-focused but not open - show current value with hint
-                  <div 
-                    className="flex items-center justify-between bg-surface-900 border border-accent rounded px-3 py-2 text-sm cursor-pointer"
-                    onClick={() => openDropdown(p.id)}
-                  >
-                    <span className="truncate">{displayValue}</span>
-                    <span className="text-accent text-xs ml-2">Press A</span>
-                  </div>
-                ) : (
-                  // Regular select for mouse/keyboard
-                  <select
-                    value={defaults[p.id] ?? ''}
-                    onChange={e => handleDefaultChange(p.id, e.target.value)}
-                    className="w-full bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm"
-                  >
-                    {options.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* Per-emulator cards */}
-      <section>
-        <h3 className="text-lg font-semibold mb-4">Emulators</h3>
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 size={32} className="animate-spin text-accent" />
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {emulators.map((emu, index) => {
-              const rowIndex = emulatorStartRow + index
-              const isThisEmulatorFocused = isEmulatorFocused(index)
-              return (
-                <div 
-                  key={emu.id} 
-                  data-focus-row={rowIndex}
-                  data-focus-col={0}
-                  className={`bg-surface-800 rounded-lg p-4 transition-all ${
-                    isThisEmulatorFocused ? 'ring-2 ring-accent' : ''
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4 className="font-semibold text-lg">{emu.name}</h4>
-                      <p className="text-surface-400 text-sm">{getPlatformNames(emu.platforms)}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <label className="flex items-center gap-2 text-sm cursor-pointer px-2 py-1 rounded">
-                        <input
-                          type="checkbox"
-                          checked={enabled[emu.id] !== false}
-                          onChange={e => handleEnabledChange(emu.id, e.target.checked)}
-                          className="w-4 h-4 accent-accent"
-                        />
-                        <span>Enabled</span>
-                      </label>
-                      <span className={`flex items-center gap-1 text-sm ${emu.installed ? 'text-green-400' : 'text-surface-400'}`}>
-                        {emu.installed ? <Check size={16} /> : <X size={16} />}
-                        {emu.installed ? 'Installed' : 'Not Installed'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {emu.path && (
-                    <div className="flex items-center gap-2 text-sm text-surface-400 mb-2">
-                      <span className="font-mono truncate flex-1">{emu.path}</span>
-                      {versionCache[emu.id] !== undefined && (
-                        <span className="text-surface-500">Version: {versionCache[emu.id]}</span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {(() => {
-                      let buttonIdx = 0
-                      return (
-                        <>
-                          <button
-                            onClick={() => handleBrowse(emu.id)}
-                            className={`px-3 py-1.5 rounded text-sm transition-all ${
-                              isEmulatorButtonFocused(index, buttonIdx++)
-                                ? 'bg-accent text-white ring-2 ring-accent scale-105'
-                                : 'bg-surface-700 hover:bg-surface-600'
-                            }`}
-                          >
-                            Browse
-                          </button>
-                          {emu.path && (
-                            <button
-                              onClick={() => handleClear(emu.id)}
-                              className={`px-3 py-1.5 rounded text-sm flex items-center gap-1 transition-all ${
-                                isEmulatorButtonFocused(index, buttonIdx++)
-                                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
-                                  : 'bg-surface-700 hover:bg-surface-600'
-                              }`}
-                            >
-                              <XCircle size={14} />
-                              Clear
-                            </button>
-                          )}
-                          {emu.installed && (
-                            <button
-                              onClick={() => handleOpenSettings(emu.id)}
-                              className={`px-3 py-1.5 rounded text-sm flex items-center gap-1 transition-all ${
-                                isEmulatorButtonFocused(index, buttonIdx++)
-                                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
-                                  : 'bg-surface-700 hover:bg-surface-600'
-                              }`}
-                            >
-                              <Settings2 size={14} />
-                              Open {emu.name} Settings
-                            </button>
-                          )}
-                          {!emu.installed && emu.downloadUrl && (
-                            <button
-                              onClick={() => handleDownload(emu.downloadUrl!)}
-                              className={`px-3 py-1.5 rounded text-sm transition-all ${
-                                isEmulatorButtonFocused(index, buttonIdx++)
-                                  ? 'bg-accent text-white ring-2 ring-accent scale-105'
-                                  : 'bg-accent hover:bg-accent-hover'
-                              }`}
-                            >
-                              Download
-                            </button>
-                          )}
-                        </>
-                      )
-                    })()}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Re-detect button at the end */}
-      <section className="mt-6">
-        <button
-          data-focus-row={redetectRow}
-          data-focus-col={0}
-          onClick={async () => {
-            await loadEmulators()
-            loadConfig()
-            await refreshPlatformsWithEmulator()
-          }}
-          disabled={loading}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all ${
-            isRedetectFocused()
-              ? 'bg-accent text-white ring-2 ring-accent scale-105'
-              : 'bg-surface-700 hover:bg-surface-600'
-          }`}
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-          Re-detect All Emulators
-        </button>
-      </section>
-    </div>
-  )
-}
-
-// BIOS Settings Section
-function BiosSettings({ isFocused, focusedRow, focusedCol: _focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
-  const [biosFiles, setBiosFiles] = useState<BiosStatus[]>([])
-  const [loading, setLoading] = useState(true)
-  const { addToast } = useUIStore()
-
-  // Simple single-column navigation
-  const itemCount = biosFiles.length
-  useEffect(() => {
-    onGridChange({ rows: itemCount, cols: Array(itemCount).fill(1) })
-  }, [itemCount, onGridChange])
-
-  const loadBiosStatus = async () => {
-    setLoading(true)
-    try {
-      const status = await window.electronAPI.bios.checkStatus()
-      setBiosFiles(status)
-    } catch (error) {
-      console.error('Failed to load BIOS status:', error)
-      addToast('error', 'Failed to load BIOS status')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadBiosStatus()
-  }, [])
-
-  const handleBrowse = async (biosId: string) => {
-    const path = await window.electronAPI.dialog.openFile([
-      { name: 'BIOS Files', extensions: ['bin', 'rom', 'qcow2', 'img', 'iso'] }
-    ])
-    if (path) {
-      const updatedStatus = await window.electronAPI.bios.setPath(biosId, path)
-      setBiosFiles(updatedStatus)
-      addToast('success', 'BIOS path updated')
-    }
-  }
-
-  // Handle gamepad confirmation
-  const handleConfirm = useCallback(() => {
-    // Ignore if we just activated (prevents double-activation from held A button)
-    if (justActivatedRef.current) return
-    
-    const bios = biosFiles[focusedRow]
-    if (bios) {
-      handleBrowse(bios.id)
-    }
-  }, [focusedRow, biosFiles, justActivatedRef])
-
-  // Gamepad navigation
-  useGamepadNavigation({
-    enabled: isFocused,
-    onNavigate: (direction) => {
-      if (direction === 'up') {
-        if (focusedRow === 0) {
-          onBack()
-        } else {
-          onFocusChange(focusedRow - 1, 0)
-        }
-      } else if (direction === 'down') {
-        if (focusedRow < itemCount - 1) {
-          onFocusChange(focusedRow + 1, 0)
-        }
-      } else if (direction === 'left') {
-        onBack()
-      }
-    },
-    onConfirm: handleConfirm,
-    onBack,
-    scrollRef
-  })
-
-  return (
-    <div>
-      <h2 className="text-2xl font-bold mb-6">BIOS & System Files</h2>
-
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-6">
-        <div className="flex gap-3">
-          <AlertCircle className="text-yellow-500 flex-shrink-0" size={20} />
-          <div>
-            <p className="text-yellow-200 font-medium">Legal Notice</p>
-            <p className="text-yellow-200/80 text-sm mt-1">
-              BIOS files are copyrighted and cannot be distributed. You must dump these files from your own consoles.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 size={32} className="animate-spin text-accent" />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {biosFiles.map((bios, index) => (
-            <div 
-              key={bios.id}
-              data-focus-row={index}
-              data-focus-col={0}
-              className={`bg-surface-800 rounded-lg p-4 transition-all ${
-                isFocused && index === focusedRow ? 'ring-2 ring-accent' : ''
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-semibold">{bios.name}</h3>
-                  {bios.required ? (
-                    <span className="text-xs px-2 py-0.5 bg-red-500/20 text-red-400 rounded">
-                      Required
-                    </span>
-                  ) : (
-                    <span className="text-xs px-2 py-0.5 bg-surface-600 text-surface-300 rounded">
-                      Optional
-                    </span>
-                  )}
-                </div>
-                <span className={`flex items-center gap-1 text-sm ${
-                  bios.found ? 'text-green-400' : 'text-surface-400'
-                }`}>
-                  {bios.found ? <Check size={16} /> : <X size={16} />}
-                  {bios.found ? 'Found' : 'Missing'}
-                </span>
-              </div>
-
-              <p className="text-sm text-surface-400 mb-2">{bios.description}</p>
-
-              {bios.path && (
-                <p className="text-surface-500 text-sm font-mono truncate mb-3">{bios.path}</p>
-              )}
-
-              <button
-                onClick={() => handleBrowse(bios.id)}
-                className={`px-3 py-1.5 rounded text-sm transition-all ${
-                  isFocused && index === focusedRow
-                    ? 'bg-accent text-white scale-105'
-                    : 'bg-surface-700 hover:bg-surface-600'
-                }`}
-              >
-                Browse
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // Paths Settings Section
 function PathsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onGridChange, onBack, justActivatedRef, scrollRef }: SettingsSectionProps) {
   const [paths, setPaths] = useState({
@@ -1317,9 +550,7 @@ function PathsSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onGri
     enabled: isFocused,
     onNavigate: (direction) => {
       if (direction === 'up') {
-        if (focusedRow === 0) {
-          onBack()
-        } else {
+        if (focusedRow > 0) {
           onFocusChange(focusedRow - 1, focusedCol)
         }
       } else if (direction === 'down') {
@@ -1473,9 +704,7 @@ function MetadataSettings({ isFocused, focusedRow, focusedCol: _focusedCol, onFo
     enabled: isFocused,
     onNavigate: (direction) => {
       if (direction === 'up') {
-        if (focusedRow === 0) {
-          onBack()
-        } else {
+        if (focusedRow > 0) {
           onFocusChange(focusedRow - 1, 0)
         }
       } else if (direction === 'down') {
@@ -1620,11 +849,11 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
     totalBytes: 0
   })
 
-  // 4 rows: startMinimized, checkUpdates, update buttons (1 or 2 cols), reset buttons (2 cols)
+  // 5 rows: startMinimized, checkUpdates, update buttons (1 or 2 cols), reset buttons (2 cols), uninstall
   // Row 2 has 2 cols when update is downloaded (Open Folder + Install)
   const updateRow2Cols = updateProgress.status === 'complete' ? 2 : 1
   useEffect(() => {
-    onGridChange({ rows: 4, cols: [1, 1, updateRow2Cols, 2] })
+    onGridChange({ rows: 5, cols: [1, 1, updateRow2Cols, 2, 1] })
   }, [onGridChange, updateRow2Cols])
 
   useEffect(() => {
@@ -1671,6 +900,14 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
 
   const handleResetDefaults = async () => {
     addToast('warning', 'This feature is not yet implemented')
+  }
+
+  const handleUninstall = async () => {
+    try {
+      await window.electronAPI.app.uninstall()
+    } catch {
+      addToast('error', 'Failed to start uninstaller')
+    }
   }
 
   const handleCheckForUpdates = async () => {
@@ -1755,6 +992,8 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
       } else {
         handleResetDefaults()
       }
+    } else if (focusedRow === 4) {
+      handleUninstall()
     }
   }, [focusedRow, focusedCol, startMinimized, checkUpdates, setFirstRun, addToast, justActivatedRef, updateInfo, updateProgress.status])
 
@@ -1763,13 +1002,11 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
     enabled: isFocused,
     onNavigate: (direction) => {
       if (direction === 'up') {
-        if (focusedRow === 0) {
-          onBack()
-        } else {
+        if (focusedRow > 0) {
           onFocusChange(focusedRow - 1, 0)
         }
       } else if (direction === 'down') {
-        if (focusedRow < 3) {
+        if (focusedRow < 4) {
           onFocusChange(focusedRow + 1, 0)
         }
       } else if (direction === 'left') {
@@ -1850,10 +1087,24 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
               Released: {new Date(updateInfo.publishedAt).toLocaleDateString()}
             </p>
             {updateInfo.releaseNotes && (
-              <p className="text-surface-300 text-sm mt-2 line-clamp-3">
-                {updateInfo.releaseNotes.slice(0, 200)}
-                {updateInfo.releaseNotes.length > 200 ? '...' : ''}
-              </p>
+              <div className="text-surface-300 text-sm mt-2 space-y-1">
+                {updateInfo.releaseNotes.split('\n').filter(l => l.trim()).map((line, i) => {
+                  const trimmed = line.trim()
+                  if (trimmed.startsWith('# ')) {
+                    return <p key={i} className="font-bold text-surface-200">{trimmed.slice(2)}</p>
+                  }
+                  if (trimmed.startsWith('## ')) {
+                    return <p key={i} className="font-semibold text-surface-200">{trimmed.slice(3)}</p>
+                  }
+                  if (trimmed.startsWith('### ')) {
+                    return <p key={i} className="font-medium text-surface-200">{trimmed.slice(4)}</p>
+                  }
+                  if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+                    return <p key={i} className="pl-4">• {trimmed.slice(2)}</p>
+                  }
+                  return <p key={i}>{trimmed}</p>
+                })}
+              </div>
             )}
           </div>
         )}
@@ -2031,6 +1282,26 @@ function GeneralSettings({ isFocused, focusedRow, focusedCol, onFocusChange, onG
             Reset to Defaults
           </button>
         </div>
+      </section>
+
+      <section className="mb-8">
+        <h3 className="text-lg font-semibold mb-4">Uninstall</h3>
+        <p className="text-surface-400 text-sm mb-4">
+          Completely remove Easy Emu from your system.
+        </p>
+        <button
+          data-focus-row={4}
+          data-focus-col={0}
+          onClick={handleUninstall}
+          className={`px-4 py-2 rounded-lg transition-all ${
+            isCellFocused(4)
+              ? 'bg-red-500 text-white ring-2 ring-red-400 scale-105'
+              : 'bg-red-500/20 hover:bg-red-500/30 text-red-400'
+          }`}
+        >
+          <Trash2 size={16} className="inline mr-2" />
+          Uninstall Easy Emu
+        </button>
       </section>
 
       <section>

@@ -146,6 +146,7 @@ export interface ElectronAPI {
     getPath: (name: 'userData' | 'home' | 'appData' | 'documents') => Promise<string>
     getVersion: () => Promise<string>
     getPlatform: () => Promise<NodeJS.Platform>
+    uninstall: () => Promise<void>
   }
   library: {
     scan: (folders: string[]) => Promise<{ added: number; removed: number }>

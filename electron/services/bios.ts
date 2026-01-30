@@ -71,25 +71,33 @@ const BIOS_DEFINITIONS: BiosDefinition[] = [
     filenames: ['firmware.bin', 'nds_firmware.bin']
   },
   {
-    id: 'xbox-mcpx',
-    name: 'Xbox MCPX Boot ROM',
-    description: 'Required for xemu (MCPX HLE v1.0)',
-    platform: 'xbox',
-    required: true,
-    filenames: ['mcpx_1.0.bin']
+    id: '3ds-aeskeys',
+    name: '3DS AES Keys',
+    description: 'Optional for Azahar (needed for encrypted ROMs on older builds)',
+    platform: '3ds',
+    required: false,
+    filenames: ['aes_keys.txt', 'aes_keys.bin']
   },
   {
-    id: 'xbox-bios',
-    name: 'Xbox Flash ROM (BIOS)',
-    description: 'Required for xemu (modified retail BIOS)',
+    id: 'xbox-mcpx',
+    name: 'Xbox MCPX Boot ROM',
+    description: 'Required for xemu',
     platform: 'xbox',
     required: true,
-    filenames: ['Complex_4627.bin', 'xbox_bios.bin', 'bios.bin']
+    filenames: ['mcpx_1.0.bin', 'mcpx.bin']
+  },
+  {
+    id: 'xbox-flash',
+    name: 'Xbox Flash BIOS',
+    description: 'Required for xemu',
+    platform: 'xbox',
+    required: true,
+    filenames: ['Complex_4627.bin', 'complex.bin', 'xbox_flash.bin']
   },
   {
     id: 'xbox-hdd',
     name: 'Xbox HDD Image',
-    description: 'Required for xemu (8GB hard disk image)',
+    description: 'Required for xemu',
     platform: 'xbox',
     required: true,
     filenames: ['xbox_hdd.qcow2']

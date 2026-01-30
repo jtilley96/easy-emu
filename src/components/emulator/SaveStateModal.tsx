@@ -28,6 +28,7 @@ export default function SaveStateModal({
   const [actionSlot, setActionSlot] = useState<number | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [focusedIndex, setFocusedIndex] = useState(0)
+  const [cacheBuster, setCacheBuster] = useState(0)
 
   const { listStates, deleteState } = useEmulatorStore()
 
@@ -62,6 +63,7 @@ export default function SaveStateModal({
       try {
         await onSave(slot)
         await loadStates()
+        setCacheBuster(Date.now())
       } catch (error) {
         console.error('Failed to save state:', error)
       } finally {
@@ -225,7 +227,7 @@ export default function SaveStateModal({
                     >
                       {state?.exists && state.screenshotPath ? (
                         <img
-                          src={pathToLocalImageUrl(state.screenshotPath)}
+                          src={`${pathToLocalImageUrl(state.screenshotPath)}${cacheBuster ? `?t=${cacheBuster}` : ''}`}
                           alt={`Slot ${i + 1}`}
                           className="w-full h-full object-cover"
                         />

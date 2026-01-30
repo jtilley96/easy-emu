@@ -33,7 +33,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getPath: (name: 'userData' | 'home' | 'appData' | 'documents') =>
       ipcRenderer.invoke('app:getPath', name),
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
-    getPlatform: () => ipcRenderer.invoke('app:getPlatform')
+    getPlatform: () => ipcRenderer.invoke('app:getPlatform'),
+    uninstall: () => ipcRenderer.invoke('app:uninstall')
   },
 
   // Library operations
@@ -195,6 +196,7 @@ export interface ElectronAPI {
     getPath: (name: 'userData' | 'home' | 'appData' | 'documents') => Promise<string>
     getVersion: () => Promise<string>
     getPlatform: () => Promise<NodeJS.Platform>
+    uninstall: () => Promise<void>
   }
   library: {
     scan: (folders: string[]) => Promise<void>

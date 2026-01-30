@@ -1,7 +1,6 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, MutableRefObject } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useEmulatorStore } from '../../store/emulatorStore'
-import { useInputStore } from '../../store/inputStore'
 
 export interface EmulatorCanvasRef {
   saveState: () => Promise<ArrayBuffer | null>
@@ -42,6 +41,21 @@ let isEmulatorLoaded = false
 // Tracks whether emulator.min.js has been loaded (its const declarations are permanent)
 let ejsEngineLoaded = false
 
+// Patch WebGL context creation to enable preserveDrawingBuffer so that
+// canvas screenshots capture the current frame instead of a cleared buffer.
+let isGetContextPatched = false
+function patchGetContext() {
+  if (isGetContextPatched) return
+  isGetContextPatched = true
+  const origGetContext = HTMLCanvasElement.prototype.getContext
+  HTMLCanvasElement.prototype.getContext = function (type: string, attrs?: any) {
+    if (type === 'webgl' || type === 'webgl2') {
+      attrs = { ...attrs, preserveDrawingBuffer: true }
+    }
+    return origGetContext.call(this, type, attrs)
+  } as typeof HTMLCanvasElement.prototype.getContext
+}
+
 // Filter out EmulatorJS translation logs
 let originalConsoleLog: typeof console.log | null = null
 function setupConsoleFilter() {
@@ -61,338 +75,79 @@ function setupConsoleFilter() {
 }
 
 /**
- * Automatically select the gamepad in EmulatorJS settings
- * Tries multiple approaches to programmatically set the gamepad
+ * Assign connected gamepads to player slots in EmulatorJS.
+ *
+ * EmulatorJS's GamepadHandler starts polling on creation. There is a race
+ * condition: the handler can detect an already-connected gamepad and fire
+ * its internal "connected" event BEFORE the emulator attaches the listener
+ * that populates `gamepadSelection`.  When that happens the gamepad is
+ * tracked inside the handler but never assigned to a player slot, so
+ * in-game controls don't work.
+ *
+ * This function works around the race by directly writing to
+ * `gamepadSelection` using the identifier format EmulatorJS expects:
+ *   "{Gamepad.id}_{Gamepad.index}"
+ *
+ * It retries a few times because `gamepadSelection` may not exist yet
+ * on the very first frame after EJS_onGameStart fires.
  */
-function autoSelectGamepad(gamepadIndex: number): void {
-  // Approach 1: Try to access EmulatorJS's internal settings API
-  try {
-    const emu = window.EJS_emulator
-    if (emu && typeof (emu as any).setGamepad === 'function') {
-      (emu as any).setGamepad(gamepadIndex)
-      return
-    }
-  } catch (err) {
-    // Emulator API approach failed, continue to next approach
-  }
-
-  // Approach 2: Try to set gamepad via EJS_STORAGE (before game starts)
-  try {
-    if (window.EJS_STORAGE && typeof window.EJS_STORAGE === 'object') {
-      const storage = window.EJS_STORAGE as any
-      if (storage.setItem) {
-        storage.setItem('gamepad', String(gamepadIndex))
-        storage.setItem('controller', String(gamepadIndex))
-        storage.setItem('EJS_gamepad', String(gamepadIndex))
-        storage.setItem('EJS_controller', String(gamepadIndex))
-        // If this works, we can skip DOM manipulation
-        return
-      }
-    }
-  } catch (err) {
-    // EJS_STORAGE approach failed, continue to next approach
-  }
-
-  // Approach 3: Try localStorage (EmulatorJS may use this)
-  // Set this early so EmulatorJS picks it up when initializing
-  try {
-    localStorage.setItem('EJS_gamepad', String(gamepadIndex))
-    localStorage.setItem('EJS_controller', String(gamepadIndex))
-    localStorage.setItem('gamepad', String(gamepadIndex))
-    localStorage.setItem('controller', String(gamepadIndex))
-    // Try this first - if EmulatorJS reads from localStorage on init, this might work
-    // and we can skip the DOM manipulation entirely
-  } catch (err) {
-    // localStorage approach failed, continue to DOM manipulation
-  }
-
-  // Approach 4: DOM manipulation - find and set the gamepad dropdown
-  // This is a fallback if the API approaches don't work
-  // Use retry mechanism to wait for EmulatorJS UI to be ready
+function assignGamepadToPlayers(): void {
   let attempts = 0
-  const maxAttempts = 20 // Try for up to 10 seconds (20 * 500ms)
-  
-  const tryFindGamepadButton = (): void => {
+  const maxAttempts = 40
+
+  const tryAssign = () => {
     attempts++
-    
-    // First check if the player div exists
-    const playerDiv = document.getElementById('ejs-player')
-    if (!playerDiv) {
+    const emu = window.EJS_emulator as any
+    if (!emu) {
       if (attempts < maxAttempts) {
-        setTimeout(tryFindGamepadButton, 500)
-        return
+        setTimeout(tryAssign, 250)
       }
       return
     }
-    
-    // Try multiple selectors for the gamepad/controller button
-    // EmulatorJS might render buttons in different ways
-    const gamepadButtonSelectors = [
-      // Direct data attributes
-      '#ejs-player [data-button="gamepad"]',
-      '#ejs-player [data-tool="gamepad"]',
-      // Class-based selectors
-      '#ejs-player .ejs-gamepad-button',
-      '#ejs-player .ejs-toolbar-button[class*="gamepad" i]',
-      '#ejs-player button[class*="gamepad" i]',
-      // Title/aria-label based
-      '#ejs-player button[title*="gamepad" i]',
-      '#ejs-player button[title*="controller" i]',
-      '#ejs-player button[aria-label*="gamepad" i]',
-      '#ejs-player button[aria-label*="controller" i]',
-      // Generic button in toolbar (might need to check all buttons)
-      '#ejs-player .ejs-toolbar button',
-      '#ejs-player button[class*="toolbar" i]',
-      // Any button in the player area
-      '#ejs-player button'
-    ]
-    
-    let gamepadButton: HTMLElement | null = null
-    for (const selector of gamepadButtonSelectors) {
-      try {
-        const buttons = document.querySelectorAll(selector)
-        for (const btn of buttons) {
-          const button = btn as HTMLElement
-          const text = (button.textContent || '').toLowerCase()
-          const title = (button.getAttribute('title') || '').toLowerCase()
-          const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase()
-          const className = (button.className || '').toLowerCase()
-          
-          // Check if this button is related to gamepad/controller
-          if (text.includes('gamepad') || text.includes('controller') ||
-              title.includes('gamepad') || title.includes('controller') ||
-              ariaLabel.includes('gamepad') || ariaLabel.includes('controller') ||
-              className.includes('gamepad') || className.includes('controller') ||
-              selector.includes('gamepad') || selector.includes('controller')) {
-            gamepadButton = button
-            break
-          }
-        }
-        if (gamepadButton) break
-      } catch (e) {
-        // Invalid selector, continue
+
+    // Initialize gamepadSelection if it doesn't exist yet (some cores take
+    // longer to set this up, causing gamepads to never get assigned)
+    if (!Array.isArray(emu.gamepadSelection)) {
+      emu.gamepadSelection = ['', '', '', '']
+    }
+
+    const rawGamepads = navigator.getGamepads()
+    let assigned = false
+
+    // Assign each connected physical gamepad to the first empty player slot
+    for (const gp of rawGamepads) {
+      if (!gp || !gp.connected) continue
+      const identifier = `${gp.id}_${gp.index}`
+
+      // Skip if this gamepad is already assigned to any slot
+      if (emu.gamepadSelection.includes(identifier)) {
+        assigned = true
         continue
       }
-    }
-    
-    if (gamepadButton) {
-      // Click to open gamepad settings
-      gamepadButton.click()
-      
-      // Wait for settings panel to open (minimal delay)
-      setTimeout(() => {
-        // Try multiple selectors for the settings panel
-        const settingsSelectors = [
-          '#ejs-player .ejs-settings',
-          '#ejs-player [class*="settings"]',
-          '#ejs-player [class*="panel"]',
-          '#ejs-player [class*="modal"]',
-          '#ejs-player [class*="dialog"]',
-          '#ejs-player [role="dialog"]',
-          '#ejs-player [class*="popup"]',
-          '#ejs-player [class*="overlay"]'
-        ]
-        
-        let settingsPanel: Element | null = null
-        for (const selector of settingsSelectors) {
-          settingsPanel = document.querySelector(selector)
-          if (settingsPanel && settingsPanel.querySelector('select')) break
+
+      // Find the first empty slot and assign
+      for (let i = 0; i < emu.gamepadSelection.length; i++) {
+        if (!emu.gamepadSelection[i] || emu.gamepadSelection[i] === '') {
+          emu.gamepadSelection[i] = identifier
+          assigned = true
+          break
         }
-        
-        if (settingsPanel) {
-          // Try multiple selectors for the gamepad select dropdown
-          const selectSelectors = [
-            'select[name*="gamepad" i]',
-            'select[name*="controller" i]',
-            'select[id*="gamepad" i]',
-            'select[id*="controller" i]',
-            'select[class*="gamepad" i]',
-            'select[class*="controller" i]',
-            'select'
-          ]
-          
-          let gamepadSelect: HTMLSelectElement | null = null
-          for (const selector of selectSelectors) {
-            const found = settingsPanel.querySelector(selector) as HTMLSelectElement
-            if (found && found.options.length > 0) {
-              gamepadSelect = found
-              break
-            }
-          }
-          
-          if (gamepadSelect) {
-            // Get available gamepads from navigator
-            const gamepads = navigator.getGamepads()
-            const availableIndices: number[] = []
-            const targetGamepad = gamepads[gamepadIndex]
-            const targetGamepadId = targetGamepad?.id || ''
-            const targetGamepadIdLower = targetGamepadId.toLowerCase()
-            
-            for (let i = 0; i < gamepads.length; i++) {
-              if (gamepads[i] && gamepads[i]!.connected) {
-                availableIndices.push(i)
-              }
-            }
-            
-            // Try to find and select the matching gamepad
-            // EmulatorJS formats options like "Xbox One Game Controller (STANDARD GAMEPAD)_0"
-            // The format is: "{Gamepad ID}_{index}"
-            let selected = false
-            let matchedOptionIndex = -1
-
-            // Define controller type patterns for flexible matching
-            // This helps match Bluetooth controllers with different names (e.g., "Xbox Wireless Controller")
-            const xboxPatterns = ['xbox', 'xinput', 'microsoft']
-            const playstationPatterns = ['playstation', 'dualshock', 'dualsense', 'sony', 'ps4', 'ps5']
-            const nintendoPatterns = ['nintendo', 'switch', 'joy-con', 'pro controller']
-
-            const isXboxController = xboxPatterns.some(p => targetGamepadIdLower.includes(p))
-            const isPlaystationController = playstationPatterns.some(p => targetGamepadIdLower.includes(p))
-            const isNintendoController = nintendoPatterns.some(p => targetGamepadIdLower.includes(p))
-
-            // Try multiple matching strategies
-            for (let i = 0; i < gamepadSelect.options.length; i++) {
-              const option = gamepadSelect.options[i]
-              const optionValue = option.value.trim()
-              const optionText = option.text.trim().toLowerCase()
-
-              // Strategy 1: Match by gamepad ID in value (e.g., "Xbox One Game Controller (STANDARD GAMEPAD)_0")
-              // EmulatorJS uses format: "{gamepadId}_{index}"
-              if (targetGamepadId && optionValue.includes(targetGamepadId)) {
-                // Also check if the index matches (the part after the underscore)
-                const indexMatch = optionValue.match(/_(\d+)$/)
-                if (indexMatch && parseInt(indexMatch[1]) === gamepadIndex) {
-                  matchedOptionIndex = i
-                  selected = true
-                  break
-                }
-              }
-
-              // Strategy 2: Match by gamepad ID in text
-              if (targetGamepadId && optionText.includes(targetGamepadIdLower)) {
-                const indexMatch = optionValue.match(/_(\d+)$/) || optionText.match(/\b(\d+)\b/)
-                if (indexMatch && parseInt(indexMatch[1]) === gamepadIndex) {
-                  matchedOptionIndex = i
-                  selected = true
-                  break
-                }
-              }
-
-              // Strategy 3: Match by controller TYPE (handles Bluetooth controllers with different names)
-              // e.g., "Xbox Wireless Controller" should match an option containing "Xbox" + same index
-              const optionIsXbox = xboxPatterns.some(p => optionText.includes(p))
-              const optionIsPlaystation = playstationPatterns.some(p => optionText.includes(p))
-              const optionIsNintendo = nintendoPatterns.some(p => optionText.includes(p))
-
-              if ((isXboxController && optionIsXbox) ||
-                  (isPlaystationController && optionIsPlaystation) ||
-                  (isNintendoController && optionIsNintendo)) {
-                // Check if index matches
-                const indexMatch = optionValue.match(/_(\d+)$/) || optionText.match(/\b(\d+)\b/)
-                if (indexMatch && parseInt(indexMatch[1]) === gamepadIndex) {
-                  matchedOptionIndex = i
-                  selected = true
-                  break
-                }
-                // If no index in option but this is the first option of matching type, use it
-                if (!indexMatch && gamepadIndex === 0) {
-                  matchedOptionIndex = i
-                  selected = true
-                  break
-                }
-              }
-
-              // Strategy 4: Direct index match in value (e.g., "0", "gamepad-0")
-              if (optionValue === String(gamepadIndex) || optionValue.endsWith(`_${gamepadIndex}`)) {
-                matchedOptionIndex = i
-                selected = true
-                break
-              }
-
-              // Strategy 5: Index in text (e.g., "Gamepad 0", "Controller 0")
-              const indexInText = optionText.match(/\b(\d+)\b/)
-              if (indexInText && parseInt(indexInText[1]) === gamepadIndex) {
-                matchedOptionIndex = i
-                selected = true
-                break
-              }
-
-              // Strategy 6: Value contains index pattern (e.g., "gamepad-0", "controller0", "something_0")
-              if (optionValue.includes(String(gamepadIndex)) &&
-                  (optionValue.includes('gamepad') || optionValue.includes('controller') || optionValue.includes('_'))) {
-                matchedOptionIndex = i
-                selected = true
-                break
-              }
-            }
-            
-            // If we found a match, set it
-            if (selected && matchedOptionIndex >= 0) {
-              // Set both value and selectedIndex to be sure
-              gamepadSelect.selectedIndex = matchedOptionIndex
-              gamepadSelect.value = gamepadSelect.options[matchedOptionIndex].value
-              
-              // Verify it was set
-              if (gamepadSelect.selectedIndex === matchedOptionIndex) {
-                // Now trigger the change event so EmulatorJS actually applies the selection
-                // Trigger events immediately (DOM is already updated)
-                try {
-                  // Focus the select first (simulates user interaction)
-                  gamepadSelect.focus()
-                  
-                  // Trigger input event first (some frameworks listen to this)
-                  const inputEvent = new Event('input', { bubbles: true, cancelable: false })
-                  gamepadSelect.dispatchEvent(inputEvent)
-                  
-                  // Use both old and new event creation methods for maximum compatibility
-                  try {
-                    const legacyChangeEvent = document.createEvent('HTMLEvents')
-                    legacyChangeEvent.initEvent('change', true, false)
-                    gamepadSelect.dispatchEvent(legacyChangeEvent)
-                  } catch (e) {
-                    // Legacy method not available, use modern one
-                  }
-                  
-                  // Modern Event constructor
-                  const changeEvent = new Event('change', { bubbles: true, cancelable: false })
-                  gamepadSelect.dispatchEvent(changeEvent)
-                  
-                  // Also try UIEvent for better compatibility
-                  const uiEvent = new UIEvent('change', { bubbles: true, cancelable: false, view: window })
-                  gamepadSelect.dispatchEvent(uiEvent)
-                  
-                  // Blur immediately to simulate user finishing the selection
-                  gamepadSelect.blur()
-                } catch (err) {
-                  console.error('[EmulatorCanvas] Error triggering change event:', err)
-                }
-              } else {
-                console.warn(`[EmulatorCanvas] Failed to set selectedIndex - current: ${gamepadSelect.selectedIndex}, wanted: ${matchedOptionIndex}`)
-              }
-            } else {
-              // Close panel if selection failed
-              setTimeout(() => {
-                const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
-                document.dispatchEvent(escapeEvent)
-              }, 200)
-            }
-          }
-        }
-      }, 150) // Wait for panel to open (reduced from 500ms)
-    } else {
-      // Retry if we haven't exceeded max attempts (faster retry for near-instant)
-      if (attempts < maxAttempts) {
-        setTimeout(tryFindGamepadButton, 200)
       }
     }
+
+    // Also update the UI labels if the method exists
+    if (typeof emu.updateGamepadLabels === 'function') {
+      try { emu.updateGamepadLabels() } catch { /* ignore */ }
+    }
+
+    // If no gamepad was assigned yet, keep retrying (gamepad may not be
+    // detected by the browser yet even though it's physically connected)
+    if (!assigned && attempts < maxAttempts) {
+      setTimeout(tryAssign, 250)
+    }
   }
-  
-  try {
-    // Start trying after minimal delay (just enough for DOM to be ready)
-    setTimeout(tryFindGamepadButton, 100)
-  } catch (err) {
-    console.error('[EmulatorCanvas] DOM manipulation approach failed:', err)
-  }
+
+  tryAssign()
 }
 
 const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
@@ -400,9 +155,7 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
     const containerRef = useRef<HTMLDivElement>(null)
     const mountedRef = useRef(true)
     const emulatorRef = useRef<typeof window.EJS_emulator | null>(null) as MutableRefObject<typeof window.EJS_emulator | null>
-    const gamepadIndexRef = useRef<number | null>(null)
     const sramIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
     const { loadSRAM, saveSRAM: saveSRAMToBackend } = useEmulatorStore()
 
     // Initialize emulator
@@ -452,48 +205,6 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
           return
         }
 
-        // Detect connected gamepad for auto-selection
-        // Use the user's physical controller (Xbox/PlayStation/Nintendo) - not platform-specific
-        const inputStore = useInputStore.getState()
-        const connectedGamepads = inputStore.gamepads.filter(g => g.connected)
-        const gamepadToUse = inputStore.activeGamepadIndex !== null
-          ? connectedGamepads.find(g => g.index === inputStore.activeGamepadIndex)
-          : connectedGamepads[0]
-        
-        if (gamepadToUse) {
-          gamepadIndexRef.current = gamepadToUse.index
-          
-          // Set gamepad preference BEFORE EmulatorJS initializes
-          // This way EmulatorJS might pick it up automatically on load
-          // Note: EmulatorJS will handle button mapping internally, but we ensure the correct
-          // physical controller is selected so the user's controller layout is used
-          try {
-            localStorage.setItem('EJS_gamepad', String(gamepadToUse.index))
-            localStorage.setItem('EJS_controller', String(gamepadToUse.index))
-            localStorage.setItem('gamepad', String(gamepadToUse.index))
-            localStorage.setItem('controller', String(gamepadToUse.index))
-            
-            // Store controller type info for reference (EmulatorJS may not use this directly)
-            localStorage.setItem('EJS_controllerType', gamepadToUse.type)
-            
-            // Also try EJS_STORAGE if it exists
-            if (window.EJS_STORAGE && typeof window.EJS_STORAGE === 'object') {
-              const storage = window.EJS_STORAGE as any
-              if (storage.setItem) {
-                storage.setItem('gamepad', String(gamepadToUse.index))
-                storage.setItem('controller', String(gamepadToUse.index))
-                storage.setItem('EJS_gamepad', String(gamepadToUse.index))
-                storage.setItem('EJS_controller', String(gamepadToUse.index))
-                storage.setItem('EJS_controllerType', gamepadToUse.type)
-              }
-            }
-          } catch (err) {
-            // Failed to set gamepad preference in storage
-          }
-        } else {
-          gamepadIndexRef.current = null
-        }
-
         // Configure EmulatorJS FIRST (before creating elements or loading script)
         // Set gameID for save data isolation
         window.EJS_gameID = String(gameId)
@@ -507,6 +218,15 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         window.EJS_startOnLoaded = true
         window.EJS_volume = 1.0
         window.EJS_color = '#6366f1'
+
+        // NDS: display both screens side by side and rotate to landscape
+        if (gameInfo.platform === 'nds') {
+          window.EJS_defaultOptions = {
+            melonds_screen_layout: 'Left/Right',
+            melonds_screen_sizing: 'Even'
+          }
+          window.EJS_videoRotation = 1
+        }
 
         // Enable gamepad support in toolbar
         window.EJS_Buttons = {
@@ -554,11 +274,15 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
               }
             }
 
-            // Auto-select gamepad after emulator is ready
-            if (gamepadIndexRef.current !== null) {
-              setTimeout(() => {
-                autoSelectGamepad(gamepadIndexRef.current!)
-              }, 500)
+            // Assign connected gamepads to player slots after emulator is ready
+            assignGamepadToPlayers()
+
+            // NDS: scale the game display wider after EmulatorJS builds its DOM
+            if (gameInfo.platform === 'nds') {
+              const gameDiv = document.querySelector('#ejs-player > div') as HTMLElement
+              if (gameDiv) {
+                gameDiv.style.transform = 'scaleX(1.75)'
+              }
             }
 
             // Start SRAM auto-save every 30 seconds
@@ -589,6 +313,9 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
 
         // Set player selector (must be set after element exists)
         window.EJS_player = '#ejs-player'
+
+        // Ensure WebGL contexts use preserveDrawingBuffer for screenshots
+        patchGetContext()
 
         // Filter console logs before loading EmulatorJS
         setupConsoleFilter()
@@ -712,7 +439,8 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         'EJS_onGameStart', 'EJS_emulator', 'EJS_gameData',
         'EJS_gameName', 'EJS_biosUrl', 'EJS_loadStateURL', 'EJS_cheats',
         'EJS_language', 'EJS_settings', 'EJS_CacheLimit', 'EJS_AdUrl',
-        'EJS_Buttons', 'EJS_ready', 'EJS_onReady'
+        'EJS_Buttons', 'EJS_ready', 'EJS_onReady', 'EJS_STORAGE', 'EJS_defaultOptions', 'EJS_defaultControls',
+        'EJS_videoRotation'
       ]
       ejsGlobals.forEach(key => {
         try {
@@ -720,12 +448,13 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         } catch { /* ignore */ }
       })
 
-      // Remove the loader script tag (but NOT emulator.min.js — its const declarations
-      // are permanent in the global scope and re-loading it causes redeclaration errors)
+      // Remove the EmulatorJS loader script and any scripts it injected (e.g. emulator.min.js)
+      // so they can be re-loaded on next game without "already declared" errors
       const loaderScript = document.getElementById('emulatorjs-loader')
       if (loaderScript) {
         loaderScript.remove()
       }
+      document.querySelectorAll('script[src*="emulatorjs"]').forEach(el => el.remove())
 
       emulatorRef.current = null
 
@@ -832,20 +561,16 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         const emu = window.EJS_emulator
         if (!emu) return null
         try {
-          // EmulatorJS has a screenshot method that returns canvas data
-          const canvas = emu.canvas || document.querySelector('#ejs-player canvas')
-          if (canvas) {
-            return new Promise((resolve) => {
-              (canvas as HTMLCanvasElement).toBlob((blob) => {
-                if (blob) {
-                  blob.arrayBuffer().then(resolve)
-                } else {
-                  resolve(null)
-                }
-              }, 'image/png')
-            })
-          }
-          return null
+          const canvas = (emu.canvas || document.querySelector('#ejs-player canvas')) as HTMLCanvasElement | null
+          if (!canvas) return null
+
+          // preserveDrawingBuffer is enabled via patchGetContext(), so
+          // the framebuffer retains its contents and toBlob works directly.
+          return new Promise((resolve) => {
+            canvas.toBlob((blob) => {
+              blob ? blob.arrayBuffer().then(resolve) : resolve(null)
+            }, 'image/png')
+          })
         } catch (err) {
           console.error('[EmulatorCanvas] screenshot error:', err)
           return null

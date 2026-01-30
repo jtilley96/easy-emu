@@ -88,6 +88,13 @@ const CORE_DEFINITIONS: CoreDefinition[] = [
     size: 7_500_000
   },
   {
+    id: 'melonds',
+    name: 'melonDS (NDS)',
+    platforms: ['nds'],
+    coreName: 'melonds',
+    size: 1_100_000
+  },
+  {
     id: 'pcsx_rearmed',
     name: 'PCSX ReARMed (PlayStation)',
     platforms: ['ps1', 'psx'],

@@ -128,6 +128,8 @@ declare global {
     EJS_onLoadState?: (slot: number) => Promise<ArrayBuffer | null>
     EJS_emulator?: EmulatorJSInstance
     EJS_STORAGE?: unknown
+    EJS_defaultOptions?: Record<string, string | number>
+    EJS_videoRotation?: number
   }
 }
 

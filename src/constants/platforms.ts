@@ -7,7 +7,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'NES',
     icon: '🎮',
     extensions: ['.nes', '.nez', '.unf', '.unif'],
-    emulators: ['retroarch', 'mesen']
+    emulators: ['retroarch']
   },
   {
     id: 'snes',
@@ -15,7 +15,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'SNES',
     icon: '🎮',
     extensions: ['.sfc', '.smc', '.fig', '.swc'],
-    emulators: ['retroarch', 'snes9x']
+    emulators: ['retroarch']
   },
   {
     id: 'n64',
@@ -23,7 +23,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'N64',
     icon: '🎮',
     extensions: ['.n64', '.z64', '.v64'],
-    emulators: ['retroarch', 'project64', 'mupen64plus']
+    emulators: ['retroarch']
   },
   {
     id: 'gamecube',
@@ -47,7 +47,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'Switch',
     icon: '🎮',
     extensions: ['.nsp', '.xci', '.nca'],
-    emulators: ['ryujinx', 'yuzu']
+    emulators: ['ryujinx']
   },
   {
     id: 'gb',
@@ -55,7 +55,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'GB',
     icon: '🎮',
     extensions: ['.gb'],
-    emulators: ['retroarch', 'mgba', 'gambatte']
+    emulators: ['retroarch']
   },
   {
     id: 'gbc',
@@ -63,7 +63,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'GBC',
     icon: '🎮',
     extensions: ['.gbc'],
-    emulators: ['retroarch', 'mgba', 'gambatte']
+    emulators: ['retroarch']
   },
   {
     id: 'gba',
@@ -71,7 +71,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'GBA',
     icon: '🎮',
     extensions: ['.gba'],
-    emulators: ['retroarch', 'mgba']
+    emulators: ['retroarch']
   },
   {
     id: 'nds',
@@ -79,7 +79,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'NDS',
     icon: '🎮',
     extensions: ['.nds', '.dsi'],
-    emulators: ['retroarch', 'desmume', 'melonds']
+    emulators: ['retroarch']
   },
   {
     id: '3ds',
@@ -87,7 +87,7 @@ export const PLATFORMS: Platform[] = [
     shortName: '3DS',
     icon: '🎮',
     extensions: ['.3ds', '.cia', '.cxi'],
-    emulators: ['citra']
+    emulators: ['azahar']
   },
   {
     id: 'genesis',
@@ -95,7 +95,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'Genesis',
     icon: '🎮',
     extensions: ['.md', '.gen', '.bin', '.smd'],
-    emulators: ['retroarch', 'blastem']
+    emulators: ['retroarch']
   },
   {
     id: 'saturn',
@@ -103,7 +103,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'Saturn',
     icon: '🎮',
     extensions: ['.iso', '.bin', '.cue'],
-    emulators: ['retroarch', 'mednafen']
+    emulators: ['retroarch']
   },
   {
     id: 'dreamcast',
@@ -111,7 +111,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'DC',
     icon: '🎮',
     extensions: ['.gdi', '.cdi', '.chd'],
-    emulators: ['retroarch', 'flycast', 'redream']
+    emulators: ['retroarch']
   },
   {
     id: 'ps1',
@@ -119,7 +119,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'PS1',
     icon: '🎮',
     extensions: ['.bin', '.cue', '.iso', '.img', '.pbp', '.chd'],
-    emulators: ['retroarch', 'duckstation']
+    emulators: ['duckstation']
   },
   {
     id: 'ps2',
@@ -143,7 +143,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'PSP',
     icon: '🎮',
     extensions: ['.iso', '.cso', '.pbp'],
-    emulators: ['retroarch', 'ppsspp']
+    emulators: ['ppsspp']
   },
   {
     id: 'xbox',
@@ -158,8 +158,8 @@ export const PLATFORMS: Platform[] = [
     name: 'Xbox 360',
     shortName: 'X360',
     icon: '🎮',
-    extensions: ['.iso', '.xex'],
-    emulators: ['xenia', 'xenia_canary']
+    extensions: ['.iso', '.xex', '.zar'],
+    emulators: ['xenia']
   },
   {
     id: 'arcade',
@@ -167,7 +167,7 @@ export const PLATFORMS: Platform[] = [
     shortName: 'Arcade',
     icon: '🕹️',
     extensions: ['.zip', '.7z'],
-    emulators: ['retroarch', 'mame']
+    emulators: ['retroarch']
   }
 ]
 

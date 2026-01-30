@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol, session } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { spawn } from 'child_process'
 import { fileURLToPath } from 'url'
 import { initializeServices, getConfigValue, checkForUpdates } from './services/index'
 
@@ -235,4 +236,19 @@ ipcMain.handle('app:getVersion', () => {
 
 ipcMain.handle('app:getPlatform', () => {
   return process.platform
+})
+
+ipcMain.handle('app:uninstall', async () => {
+  if (process.platform === 'win32') {
+    // NSIS uninstaller lives next to the app executable
+    const exeDir = path.dirname(app.getPath('exe'))
+    const uninstaller = path.join(exeDir, 'Uninstall EasyEmu.exe')
+    if (fs.existsSync(uninstaller)) {
+      spawn(uninstaller, [], { detached: true, stdio: 'ignore' }).unref()
+      app.quit()
+      return
+    }
+  }
+  // Fallback: open system app settings
+  shell.openExternal('ms-settings:appsfeatures')
 })
