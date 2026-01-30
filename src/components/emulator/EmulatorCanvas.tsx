@@ -91,19 +91,26 @@ function setupConsoleFilter() {
  */
 function assignGamepadToPlayers(): void {
   let attempts = 0
-  const maxAttempts = 20
+  const maxAttempts = 40
 
   const tryAssign = () => {
     attempts++
     const emu = window.EJS_emulator as any
-    if (!emu || !Array.isArray(emu.gamepadSelection)) {
+    if (!emu) {
       if (attempts < maxAttempts) {
         setTimeout(tryAssign, 250)
       }
       return
     }
 
+    // Initialize gamepadSelection if it doesn't exist yet (some cores take
+    // longer to set this up, causing gamepads to never get assigned)
+    if (!Array.isArray(emu.gamepadSelection)) {
+      emu.gamepadSelection = ['', '', '', '']
+    }
+
     const rawGamepads = navigator.getGamepads()
+    let assigned = false
 
     // Assign each connected physical gamepad to the first empty player slot
     for (const gp of rawGamepads) {
@@ -111,12 +118,16 @@ function assignGamepadToPlayers(): void {
       const identifier = `${gp.id}_${gp.index}`
 
       // Skip if this gamepad is already assigned to any slot
-      if (emu.gamepadSelection.includes(identifier)) continue
+      if (emu.gamepadSelection.includes(identifier)) {
+        assigned = true
+        continue
+      }
 
       // Find the first empty slot and assign
       for (let i = 0; i < emu.gamepadSelection.length; i++) {
         if (!emu.gamepadSelection[i] || emu.gamepadSelection[i] === '') {
           emu.gamepadSelection[i] = identifier
+          assigned = true
           break
         }
       }
@@ -125,6 +136,12 @@ function assignGamepadToPlayers(): void {
     // Also update the UI labels if the method exists
     if (typeof emu.updateGamepadLabels === 'function') {
       try { emu.updateGamepadLabels() } catch { /* ignore */ }
+    }
+
+    // If no gamepad was assigned yet, keep retrying (gamepad may not be
+    // detected by the browser yet even though it's physically connected)
+    if (!assigned && attempts < maxAttempts) {
+      setTimeout(tryAssign, 250)
     }
   }
 
@@ -199,6 +216,15 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         window.EJS_volume = 1.0
         window.EJS_color = '#6366f1'
 
+        // NDS: display both screens side by side and rotate to landscape
+        if (gameInfo.platform === 'nds') {
+          window.EJS_defaultOptions = {
+            melonds_screen_layout: 'Left/Right',
+            melonds_screen_sizing: 'Even'
+          }
+          window.EJS_videoRotation = 1
+        }
+
         // Enable gamepad support in toolbar
         window.EJS_Buttons = {
           playPause: true,
@@ -225,9 +251,17 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
             isEmulatorLoaded = true
             isEmulatorLoading = false
             onStart?.()
-            
+
             // Assign connected gamepads to player slots after emulator is ready
             assignGamepadToPlayers()
+
+            // NDS: scale the game display wider after EmulatorJS builds its DOM
+            if (gameInfo.platform === 'nds') {
+              const gameDiv = document.querySelector('#ejs-player > div') as HTMLElement
+              if (gameDiv) {
+                gameDiv.style.transform = 'scaleX(1.75)'
+              }
+            }
           }
         }
 
@@ -330,7 +364,8 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         'EJS_onGameStart', 'EJS_emulator', 'EJS_gameData',
         'EJS_gameName', 'EJS_biosUrl', 'EJS_loadStateURL', 'EJS_cheats',
         'EJS_language', 'EJS_settings', 'EJS_CacheLimit', 'EJS_AdUrl',
-        'EJS_Buttons', 'EJS_ready', 'EJS_onReady'
+        'EJS_Buttons', 'EJS_ready', 'EJS_onReady', 'EJS_STORAGE', 'EJS_defaultOptions', 'EJS_defaultControls',
+        'EJS_videoRotation'
       ]
       ejsGlobals.forEach(key => {
         try {
@@ -338,12 +373,13 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         } catch { /* ignore */ }
       })
 
-      // Remove the EmulatorJS loader script so it can be re-loaded on next game
-      // This is necessary because EmulatorJS only auto-initializes on script load
+      // Remove the EmulatorJS loader script and any scripts it injected (e.g. emulator.min.js)
+      // so they can be re-loaded on next game without "already declared" errors
       const loaderScript = document.getElementById('emulatorjs-loader')
       if (loaderScript) {
         loaderScript.remove()
       }
+      document.querySelectorAll('script[src*="emulatorjs"]').forEach(el => el.remove())
 
       emulatorRef.current = null
 

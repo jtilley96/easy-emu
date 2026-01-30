@@ -87,7 +87,7 @@ export const PLATFORMS: Platform[] = [
     shortName: '3DS',
     icon: '🎮',
     extensions: ['.3ds', '.cia', '.cxi'],
-    emulators: []
+    emulators: ['azahar']
   },
   {
     id: 'genesis',

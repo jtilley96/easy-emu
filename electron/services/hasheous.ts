@@ -325,9 +325,10 @@ async function useHasheousDataDirectly(gameId: string, lookupResult: HasheousLoo
     updateData.description = noIntroSig.game.description
   }
 
-  // Try to download logo from Hasheous attributes
+  // Try to download logo from Hasheous attributes (only if no cover already set)
+  const existingGame = getGame(gameId)
   const logoAttr = lookupResult.attributes?.find(a => a.attributeName === 'Logo')
-  if (logoAttr?.value) {
+  if (logoAttr?.value && !existingGame?.coverPath) {
     const coverPath = await downloadHasheousImage(logoAttr.value, gameId)
     if (coverPath) {
       updateData.coverPath = coverPath
@@ -431,10 +432,12 @@ export async function scrapeGame(gameId: string): Promise<ScrapeResult> {
         rating: metadata.total_rating ? Math.round(metadata.total_rating) / 10 : undefined
       }
 
-      if (coverPath) {
+      // Only set cover/backdrop if the game doesn't already have one
+      // (preserves manually-set images)
+      if (coverPath && !game.coverPath) {
         updateData.coverPath = coverPath
       }
-      if (backdropPath) {
+      if (backdropPath && !game.backdropPath) {
         updateData.backdropPath = backdropPath
       }
 

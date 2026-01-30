@@ -380,7 +380,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
                 focusedField === fields.indexOf('title') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
               }`}
               required
-              readOnly
             />
           </div>
 
@@ -435,7 +434,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
               className={`w-full bg-surface-800 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent resize-none ${
                 focusedField === fields.indexOf('description') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
               }`}
-              readOnly
             />
           </div>
 
@@ -448,7 +446,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
               className={`w-full bg-surface-800 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ${
                 focusedField === fields.indexOf('developer') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
               }`}
-              readOnly
             />
           </div>
 
@@ -461,7 +458,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
               className={`w-full bg-surface-800 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ${
                 focusedField === fields.indexOf('publisher') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
               }`}
-              readOnly
             />
           </div>
 
@@ -475,7 +471,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
               className={`w-full bg-surface-800 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ${
                 focusedField === fields.indexOf('releaseDate') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
               }`}
-              readOnly
             />
           </div>
 
@@ -516,7 +511,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
               className={`w-full bg-surface-800 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ${
                 focusedField === fields.indexOf('genres') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
               }`}
-              readOnly
             />
           </div>
 
@@ -549,7 +543,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
                   className={`flex-1 bg-surface-800 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ${
                     focusedField === fields.indexOf('coverPath') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
                   }`}
-                  readOnly
                 />
                 <button
                   data-field-index={fields.indexOf('coverBrowse')}
@@ -593,7 +586,6 @@ export default function EditMetadataModal({ game, isOpen, onClose }: EditMetadat
                   className={`flex-1 bg-surface-800 border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent ${
                     focusedField === fields.indexOf('backdropPath') ? 'border-accent ring-2 ring-accent' : 'border-surface-700'
                   }`}
-                  readOnly
                 />
                 <button
                   data-field-index={fields.indexOf('backdropBrowse')}

@@ -71,6 +71,14 @@ const BIOS_DEFINITIONS: BiosDefinition[] = [
     filenames: ['firmware.bin', 'nds_firmware.bin']
   },
   {
+    id: '3ds-aeskeys',
+    name: '3DS AES Keys',
+    description: 'Optional for Azahar (needed for encrypted ROMs on older builds)',
+    platform: '3ds',
+    required: false,
+    filenames: ['aes_keys.txt', 'aes_keys.bin']
+  },
+  {
     id: 'xbox-mcpx',
     name: 'Xbox MCPX Boot ROM',
     description: 'Required for xemu',

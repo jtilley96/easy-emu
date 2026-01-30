@@ -62,6 +62,7 @@ const RETROARCH_CORE_BY_PLATFORM: Record<string, string> = {
   gba: 'mgba_libretro',
   genesis: 'genesis_plus_gx_libretro',
   psp: 'ppsspp_libretro',
+  nds: 'desmume_libretro',
   ps1: 'beetle_psx_libretro',
   arcade: 'fbneo_libretro'
 }
@@ -77,7 +78,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
     id: 'retroarch',
     name: 'RetroArch',
     executable: process.platform === 'win32' ? 'retroarch.exe' : 'retroarch',
-    platforms: ['nes', 'snes', 'n64', 'gb', 'gbc', 'gba', 'genesis', 'psp', 'ps1', 'arcade'],
+    platforms: ['nes', 'snes', 'n64', 'gb', 'gbc', 'gba', 'nds', 'genesis', 'psp', 'ps1', 'arcade'],
     defaultPaths: {
       win32: [
         'C:\\RetroArch-Win64',
@@ -338,6 +339,35 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
     noVersionCheck: true
   },
   {
+    id: 'azahar',
+    name: 'Azahar',
+    executable: process.platform === 'win32' ? 'azahar.exe' : 'azahar',
+    platforms: ['3ds'],
+    defaultPaths: {
+      win32: [
+        'C:\\Program Files\\Azahar',
+        'C:\\Azahar',
+        '%LOCALAPPDATA%\\Programs\\Azahar',
+        '%USERPROFILE%\\scoop\\apps\\azahar\\current'
+      ],
+      darwin: [
+        '/Applications/Azahar.app/Contents/MacOS',
+        '/opt/homebrew/bin',
+        '/usr/local/bin'
+      ],
+      linux: [
+        '/usr/bin',
+        '/usr/local/bin',
+        '~/.local/bin',
+        '~/bin',
+        '~/Applications'
+      ]
+    },
+    launchArgs: (romPath: string) => ['-f', romPath],
+    canInstall: true,
+    downloadUrl: 'https://azahar-emu.org/'
+  },
+  {
     id: 'xenia',
     name: 'Xenia',
     executable: process.platform === 'win32' ? 'xenia.exe' : 'xenia',
@@ -481,7 +511,7 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
   }
 
   if (!emulatorDef || !emulatorPath) {
-    throw new Error(`No emulator found for platform: ${game.platform}. Add one in Settings → Emulators.`)
+    throw new Error(`No emulator configured for ${game.platform}. Set one under Consoles → ${game.platform.toUpperCase()}.`)
   }
 
   // RetroArch: We do not validate core paths here. Cores may live in {retroarch}/cores/ (Windows
