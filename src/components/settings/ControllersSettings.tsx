@@ -59,7 +59,8 @@ const DEFAULT_HOTKEYS: Record<string, EmulatorHotkeyAction> = {
 
 const GRID_COLS = 2
 const GRID_ROWS = Math.ceil(FUNCTION_KEYS.length / GRID_COLS) // 6 rows of keys
-const TOTAL_ROWS = GRID_ROWS + 1 // +1 for reset button
+const DOLPHIN_ROW = GRID_ROWS // Dolphin controller type row
+const TOTAL_ROWS = GRID_ROWS + 2 // +1 for reset button, +1 for Dolphin controller
 
 export default function ControllersSettings({
   isFocused,
@@ -78,17 +79,13 @@ export default function ControllersSettings({
   const [openDropdownKey, setOpenDropdownKey] = useState<string | null>(null)
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(0)
 
-  // Grid: 6 rows of 2 F-keys + 1 row for reset button
+  // Grid: 6 rows of 2 F-keys + 1 row for Dolphin controller + 1 row for reset button
   useEffect(() => {
     const cols = Array(GRID_ROWS).fill(GRID_COLS) as number[]
+    cols.push(1) // Dolphin controller row
     cols.push(1) // reset button row
     onGridChange({ rows: TOTAL_ROWS, cols })
   }, [onGridChange])
-
-  // Grid: 12 rows (F1-F12) + 1 row for Dolphin controller, 1 column each
-  useEffect(() => {
-    onGridChange({ rows: TOTAL_ROWS, cols: Array(TOTAL_ROWS).fill(1) })
-  }, [onGridChange, TOTAL_ROWS])
 
   // Load hotkeys and Dolphin controller type from config
   useEffect(() => {
@@ -235,7 +232,8 @@ export default function ControllersSettings({
   const isCellFocused = (row: number, col: number) =>
     isFocused && focusedRow === row && focusedCol === col && !isDropdownOpen
 
-  const isResetFocused = isFocused && focusedRow === GRID_ROWS && !isDropdownOpen
+  const RESET_ROW = DOLPHIN_ROW + 1
+  const isResetFocused = isFocused && focusedRow === RESET_ROW && !isDropdownOpen
 
   // Handle gamepad confirmation
   const handleConfirm = useCallback(() => {
@@ -247,8 +245,14 @@ export default function ControllersSettings({
     }
 
     // Reset button row
-    if (focusedRow === GRID_ROWS) {
+    if (focusedRow === RESET_ROW) {
       handleResetDefaults()
+      return
+    }
+
+    // Dolphin controller type row
+    if (focusedRow === DOLPHIN_ROW) {
+      openDropdown('dolphin')
       return
     }
 
@@ -256,7 +260,7 @@ export default function ControllersSettings({
     if (key) {
       openDropdown(key)
     }
-  }, [focusedRow, focusedCol, isDropdownOpen, confirmDropdownSelection, openDropdown, justActivatedRef])
+  }, [focusedRow, focusedCol, isDropdownOpen, confirmDropdownSelection, openDropdown, justActivatedRef, RESET_ROW])
 
   // Handle back button
   const handleBackButton = useCallback(() => {
@@ -394,7 +398,7 @@ export default function ControllersSettings({
               <kbd className="px-1 bg-surface-900 border border-surface-600 rounded font-mono text-xs">Escape</kbd> always exits the game. <kbd className="px-1 bg-surface-900 border border-surface-600 rounded font-mono text-xs">P</kbd> toggles pause.
             </p>
             <button
-              data-focus-row={GRID_ROWS}
+              data-focus-row={RESET_ROW}
               data-focus-col={0}
               onClick={handleResetDefaults}
               className={`px-3 py-1.5 rounded text-xs transition-colors ${

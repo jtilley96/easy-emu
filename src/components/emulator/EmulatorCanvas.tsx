@@ -155,6 +155,7 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
     const containerRef = useRef<HTMLDivElement>(null)
     const mountedRef = useRef(true)
     const emulatorRef = useRef<typeof window.EJS_emulator | null>(null) as MutableRefObject<typeof window.EJS_emulator | null>
+    const sramIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
     const { loadSRAM, saveSRAM: saveSRAMToBackend } = useEmulatorStore()
 
     // Initialize emulator
@@ -253,6 +254,25 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
             isEmulatorLoaded = true
             isEmulatorLoading = false
             onStart?.()
+
+            // Load backend SRAM into emulator after game starts
+            if (sramData && sramData.byteLength > 0) {
+              try {
+                const emu = window.EJS_emulator
+                const sramUint8 = new Uint8Array(sramData)
+                if (emu?.gameManager?.setSaveFile) {
+                  emu.gameManager.setSaveFile(sramUint8)
+                } else if (emu?.gameManager?.setSRAM) {
+                  emu.gameManager.setSRAM(sramUint8)
+                } else if ((emu as any)?.setSaveFile) {
+                  (emu as any).setSaveFile(sramUint8)
+                } else if ((emu as any)?.setSRAM) {
+                  (emu as any).setSRAM(sramUint8)
+                }
+              } catch (err) {
+                console.error('[EmulatorCanvas] Failed to load SRAM into emulator:', err)
+              }
+            }
 
             // Assign connected gamepads to player slots after emulator is ready
             assignGamepadToPlayers()
