@@ -1,6 +1,6 @@
 {
   "name": "easyemu",
-  "version": "1.0.0-alpha.5",
+  "version": "1.0.0-alpha.6",
   "description": "A unified interface for playing emulated games across all gaming systems",
   "main": "dist-electron/main.js",
   "scripts": {
