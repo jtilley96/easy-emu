@@ -5,6 +5,7 @@ import fs from 'fs'
 import { getConfigValue, setConfigValue } from './config'
 import { getGame, updateGame } from './library'
 import type { GameRecord } from './library'
+import { configureDolphinController, getDolphinConfigPath, hasDolphinConfig, type ControllerType } from './dolphinConfig'
 
 let mainWindowRef: BrowserWindow | null = null
 
@@ -106,14 +107,14 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
       ]
     },
     launchArgs: (romPath: string, ctx?: LaunchContext) => {
-      if (!ctx) return ['-L', 'auto', romPath]
+      if (!ctx) return ['--fullscreen', '-L', 'auto', romPath]
       const coreName = RETROARCH_CORE_BY_PLATFORM[ctx.platform]
-      if (!coreName) return ['-L', 'auto', romPath]
+      if (!coreName) return ['--fullscreen', '-L', 'auto', romPath]
       const ext = getRetroArchCoreExt()
       const coresDir = path.join(path.dirname(ctx.emulatorPath), 'cores')
       const corePath = path.join(coresDir, coreName + ext)
-      if (!fs.existsSync(corePath)) return ['-L', 'auto', romPath]
-      return ['-L', corePath, romPath]
+      if (!fs.existsSync(corePath)) return ['--fullscreen', '-L', 'auto', romPath]
+      return ['--fullscreen', '-L', corePath, romPath]
     },
     canInstall: true,
     downloadUrl: 'https://www.retroarch.com/?page=platforms'
@@ -148,7 +149,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/org.DolphinEmu.dolphin-emu/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => ['-e', romPath],
+    launchArgs: (romPath: string) => ['-b', '-e', romPath],
     canInstall: true,
     downloadUrl: 'https://dolphin-emu.org/download/'
   },
@@ -179,7 +180,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/org.duckstation.DuckStation/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => ['-batch', romPath],
+    launchArgs: (romPath: string) => ['-batch', '-fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://github.com/stenzek/duckstation/releases'
   },
@@ -211,7 +212,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/net.pcsx2.PCSX2/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => ['-batch', romPath],
+    launchArgs: (romPath: string) => ['-batch', '-fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://pcsx2.net/downloads/'
   },
@@ -241,7 +242,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '~/Applications'
       ]
     },
-    launchArgs: (romPath: string) => ['--no-gui', romPath],
+    launchArgs: (romPath: string) => ['--no-gui', '--fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://rpcs3.net/download'
   },
@@ -271,7 +272,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '~/Applications'
       ]
     },
-    launchArgs: (romPath: string) => [romPath],
+    launchArgs: (romPath: string) => ['--fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://github.com/GreemDev/Ryubing/releases'
   },
@@ -302,7 +303,7 @@ const EMULATOR_DEFINITIONS: EmulatorDefinition[] = [
         '/var/lib/flatpak/app/org.ppsspp.PPSSPP/current/active/files/bin'
       ]
     },
-    launchArgs: (romPath: string) => [romPath],
+    launchArgs: (romPath: string) => ['--fullscreen', romPath],
     canInstall: true,
     downloadUrl: 'https://www.ppsspp.org/downloads.html'
   },
@@ -534,9 +535,38 @@ export async function launchGame(gameId: string, emulatorId?: string): Promise<v
     }
   }
 
+  // Check for xemu BIOS files
+  if (emulatorDef.id === 'xemu') {
+    const biosPaths = getConfigValue('biosPaths') as Record<string, string>
+    const missing: string[] = []
+    if (!biosPaths['xbox-mcpx'] || !fs.existsSync(biosPaths['xbox-mcpx'])) missing.push('Xbox MCPX Boot ROM')
+    if (!biosPaths['xbox-bios'] || !fs.existsSync(biosPaths['xbox-bios'])) missing.push('Xbox Flash ROM (BIOS)')
+    if (!biosPaths['xbox-hdd'] || !fs.existsSync(biosPaths['xbox-hdd'])) missing.push('Xbox HDD Image')
+    if (missing.length > 0) {
+      throw new Error(
+        `Xbox BIOS files not configured: ${missing.join(', ')}.\n\n` +
+        `xemu requires MCPX Boot ROM, Flash ROM, and HDD Image to run.\n\n` +
+        `Open xemu and configure these files in its Settings → System, then set the paths in EasyEmu Settings → BIOS Files.`
+      )
+    }
+  }
+
   const romPath = resolveRomPath(game)
   if (!fs.existsSync(romPath)) {
     throw new Error('ROM file not found. It may have been moved or deleted.')
+  }
+
+  // Auto-configure Dolphin controller if launching a GameCube/Wii game
+  if (emulatorDef.id === 'dolphin') {
+    // Get the configured controller type from config, default to 'xbox' (most common)
+    const controllerType = (getConfigValue('dolphinControllerType') as ControllerType) || 'xbox'
+    // Get the stored device name (for Bluetooth controllers like "Xbox Wireless Controller")
+    const deviceName = getConfigValue('dolphinDeviceName') as string | undefined
+    const configResult = configureDolphinController(controllerType, deviceName)
+    if (!configResult.success) {
+      console.warn('[Emulators] Failed to configure Dolphin controller:', configResult.error)
+      // Continue anyway - Dolphin may still work with existing config
+    }
   }
 
   const ctx: LaunchContext = { platform: game.platform, emulatorPath }
@@ -638,6 +668,8 @@ export function registerEmulatorHandlers(): void {
     if (def.noVersionCheck) return 'Installed'
     const emulatorPath = detectEmulator(def)
     if (!emulatorPath) return 'Unknown'
+    // Skip version check for emulators that don't support --version flag
+    if (def.supportsVersion === false) return 'Installed'
     return new Promise(resolve => {
       let settled = false
       const finish = (v: string) => {
@@ -668,5 +700,29 @@ export function registerEmulatorHandlers(): void {
         finish(match ? match[1] : first.slice(0, 32) || 'Unknown')
       })
     })
+  })
+
+  // Dolphin controller configuration handlers
+  ipcMain.handle('emulators:configureDolphinController', (_event, controllerType: ControllerType, deviceName?: string) => {
+    // Store the controller type preference
+    setConfigValue('dolphinControllerType', controllerType)
+    // Store the device name if provided (for Bluetooth controllers)
+    if (deviceName) {
+      setConfigValue('dolphinDeviceName', deviceName)
+    }
+    // Apply the configuration immediately with the actual device name
+    return configureDolphinController(controllerType, deviceName)
+  })
+
+  ipcMain.handle('emulators:getDolphinControllerType', () => {
+    return (getConfigValue('dolphinControllerType') as ControllerType) || 'xbox'
+  })
+
+  ipcMain.handle('emulators:getDolphinConfigPath', () => {
+    return getDolphinConfigPath()
+  })
+
+  ipcMain.handle('emulators:hasDolphinConfig', () => {
+    return hasDolphinConfig()
   })
 }

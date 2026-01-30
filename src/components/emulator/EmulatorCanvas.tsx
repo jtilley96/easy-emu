@@ -35,9 +35,11 @@ interface EmulatorCanvasProps {
 
 const EMULATORJS_CDN = 'https://cdn.emulatorjs.org/stable'
 
-// Module-level flag to prevent multiple script loads across React Strict Mode double-mounting
+// Module-level flags to prevent multiple script loads across React Strict Mode double-mounting
 let isEmulatorLoading = false
 let isEmulatorLoaded = false
+// Tracks whether emulator.min.js has been loaded (its const declarations are permanent)
+let ejsEngineLoaded = false
 
 // Patch WebGL context creation to enable preserveDrawingBuffer so that
 // canvas screenshots capture the current frame instead of a cleared buffer.
@@ -262,13 +264,23 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
                 gameDiv.style.transform = 'scaleX(1.75)'
               }
             }
-          }
-        }
 
-        // Load SRAM if available
-        if (sramData) {
-          const uint8Array = new Uint8Array(sramData)
-          localStorage.setItem(`EJS_${gameId}_sram`, JSON.stringify(Array.from(uint8Array)))
+            // Start SRAM auto-save every 30 seconds
+            if (sramIntervalRef.current) clearInterval(sramIntervalRef.current)
+            sramIntervalRef.current = setInterval(async () => {
+              try {
+                const emu = window.EJS_emulator
+                if (!emu) return
+                let data = emu.gameManager?.getSaveFile?.()
+                if (!data) data = emu.gameManager?.getSRAM?.()
+                if (!data) data = (emu as any).getSaveFile?.()
+                if (!data) data = (emu as any).getSRAM?.()
+                if (data && data.byteLength > 0) {
+                  await saveSRAMToBackend(gameId, data)
+                }
+              } catch { /* ignore auto-save errors */ }
+            }, 30000)
+          }
         }
 
         // Create player div
@@ -288,21 +300,44 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         // Filter console logs before loading EmulatorJS
         setupConsoleFilter()
 
-        // Remove any existing loader script so we can re-initialize EmulatorJS
-        // This is necessary because EmulatorJS only auto-initializes on script load
         const existingScript = document.getElementById('emulatorjs-loader')
         if (existingScript) {
           existingScript.remove()
         }
 
-        // Load the EmulatorJS loader script
+        // On subsequent games, emulator.min.js is already loaded in the page.
+        // Its top-level `const EJS_STORAGE` declaration is permanent — re-adding the script
+        // causes a SyntaxError. We intercept appendChild to block the duplicate script
+        // while still letting loader.js run its initialization logic.
+        let interceptCleanup: (() => void) | null = null
+        if (ejsEngineLoaded) {
+          const origAppendChild = Node.prototype.appendChild
+          Node.prototype.appendChild = function<T extends Node>(node: T): T {
+            if (node instanceof HTMLScriptElement && node.src && node.src.includes('emulator.min')) {
+              // Block emulator.min.js from being re-added — already loaded.
+              // Fire a synthetic load event so loader.js continues initialization.
+              setTimeout(() => node.dispatchEvent(new Event('load')), 0)
+              return node
+            }
+            return origAppendChild.call(this, node) as T
+          }
+          interceptCleanup = () => {
+            Node.prototype.appendChild = origAppendChild
+          }
+        }
+
         const script = document.createElement('script')
         script.src = `${EMULATORJS_CDN}/data/loader.js`
         script.async = true
         script.id = 'emulatorjs-loader'
         script.onerror = () => {
+          interceptCleanup?.()
           isEmulatorLoading = false
           onError?.(new Error('Failed to load EmulatorJS'))
+        }
+        script.onload = () => {
+          interceptCleanup?.()
+          ejsEngineLoaded = true
         }
         document.body.appendChild(script)
 
@@ -317,9 +352,29 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
     const cleanupEmulator = useCallback(async () => {
       mountedRef.current = false
 
-      // Reset flags immediately to allow re-initialization
+      // Reset flags FIRST to allow re-initialization even if cleanup takes time
       isEmulatorLoading = false
       isEmulatorLoaded = false
+
+      // Clear SRAM auto-save interval
+      if (sramIntervalRef.current) {
+        clearInterval(sramIntervalRef.current)
+        sramIntervalRef.current = null
+      }
+
+      // Save SRAM before destroying the emulator
+      try {
+        const emu = window.EJS_emulator
+        if (emu) {
+          let data = emu.gameManager?.getSaveFile?.()
+          if (!data) data = emu.gameManager?.getSRAM?.()
+          if (!data) data = (emu as any).getSaveFile?.()
+          if (!data) data = (emu as any).getSRAM?.()
+          if (data && data.byteLength > 0) {
+            await saveSRAMToBackend(gameId, data)
+          }
+        }
+      } catch { /* ignore save errors during cleanup */ }
 
       try {
         // Try to stop the emulator using the EJS_emulator instance
@@ -341,7 +396,7 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
         console.error('Error stopping emulator:', error)
       }
 
-      // Revoke blob URL if exists
+      // Revoke blob URLs if they exist
       if (window.EJS_gameUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(window.EJS_gameUrl)
       }
@@ -457,10 +512,22 @@ const EmulatorCanvas = forwardRef<EmulatorCanvasRef, EmulatorCanvasProps>(
       },
       saveSRAM: async (): Promise<ArrayBuffer | null> => {
         const emu = window.EJS_emulator
-        if (!emu?.gameManager) return null
+        if (!emu) return null
         try {
-          const data = emu.gameManager.getSRAM?.()
-          if (data) {
+          let data = emu.gameManager?.getSaveFile?.()
+          if (!data) data = emu.gameManager?.getSRAM?.()
+          if (!data) data = (emu as any).getSaveFile?.()
+          if (!data) data = (emu as any).getSRAM?.()
+          if (!data) {
+            // Fallback: try localStorage where EmulatorJS may store SRAM
+            const stored = localStorage.getItem(`EJS_${gameId}_sram`)
+              || localStorage.getItem(`ejs_sram_${gameId}`)
+            if (stored) {
+              const arr = JSON.parse(stored)
+              data = new Uint8Array(arr).buffer
+            }
+          }
+          if (data && data.byteLength > 0) {
             await saveSRAMToBackend(gameId, data)
             return data
           }

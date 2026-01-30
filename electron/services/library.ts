@@ -53,7 +53,8 @@ const EXTENSION_PLATFORM_MAP: Record<string, string> = {
   '.wbfs': 'wii', '.wia': 'wii',
   '.chd': 'unknown',
   '.cso': 'psp',
-  '.gdi': 'dreamcast', '.cdi': 'dreamcast'
+  '.gdi': 'dreamcast', '.cdi': 'dreamcast',
+  '.xex': 'xbox360'
 }
 
 function getLibraryPath(): string {
@@ -107,6 +108,8 @@ function getTitleFromFilename(filePath: string): string {
 // Folder/path substring hints for ambiguous extensions (.iso, .bin, .cue, .chd).
 // Checked in order; first match wins. Prefer more specific (e.g. ps3) before general (e.g. ps1).
 const PLATFORM_HINTS: { platform: string; hints: string[] }[] = [
+  { platform: 'xbox360', hints: ['xbox360', 'xbox 360', 'x360', 'xenia', 'xb360'] },
+  { platform: 'xbox', hints: ['xbox', 'xemu', 'original xbox', 'og xbox'] },
   { platform: 'ps3', hints: ['ps3', 'playstation 3', 'playstation3', 'rpcs3', 'ps 3', 'ps-3'] },
   { platform: 'ps2', hints: ['ps2', 'playstation 2', 'playstation2'] },
   { platform: 'ps1', hints: ['ps1', 'psx', 'playstation', 'playstation 1'] },

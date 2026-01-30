@@ -37,6 +37,9 @@ export interface EmulatorJSGameManager {
   setState?: (data: Uint8Array) => void
   loadState?: (data: Uint8Array) => void
   getSRAM?: () => ArrayBuffer
+  getSaveFile?: () => ArrayBuffer
+  setSaveFile?: (data: Uint8Array) => void
+  setSRAM?: (data: Uint8Array) => void
   pause?: () => void
   play?: () => void
 }
@@ -55,6 +58,7 @@ export interface EmulatorJSInstance {
   saveState: () => Promise<ArrayBuffer>
   loadState: (data: ArrayBuffer) => Promise<void>
   getSRAM: () => ArrayBuffer | null
+  getSaveFile?: () => ArrayBuffer | null
   quickSave?: () => void
   quickLoad?: () => void
 

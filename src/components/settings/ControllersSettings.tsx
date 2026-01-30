@@ -1,8 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Keyboard } from 'lucide-react'
+import { Keyboard, Gamepad2 } from 'lucide-react'
 import { useUIStore } from '../../store/uiStore'
+import { useInputStore } from '../../store/inputStore'
 import { useGamepadNavigation } from '../../hooks/useGamepadNavigation'
 import type { SettingsSectionProps, EmulatorHotkeyAction } from '../../types'
+
+type DolphinControllerType = 'xbox' | 'playstation' | 'nintendo' | 'generic'
+
+interface ControllerTypeOption {
+  value: DolphinControllerType
+  label: string
+  description: string
+}
+
+const CONTROLLER_TYPE_OPTIONS: ControllerTypeOption[] = [
+  { value: 'xbox', label: 'Xbox Controller', description: 'Xbox One, Xbox Series, Xbox 360' },
+  { value: 'playstation', label: 'PlayStation Controller', description: 'DualShock, DualSense' },
+  { value: 'nintendo', label: 'Nintendo Controller', description: 'Switch Pro, Joy-Con, Wii U Pro' },
+  { value: 'generic', label: 'Generic Controller', description: 'Other/third-party controllers' }
+]
 
 interface HotkeyOption {
   value: EmulatorHotkeyAction
@@ -57,6 +73,7 @@ export default function ControllersSettings({
 }: SettingsSectionProps) {
   const { addToast } = useUIStore()
   const [hotkeys, setHotkeys] = useState<Record<string, EmulatorHotkeyAction>>({})
+  const [dolphinControllerType, setDolphinControllerType] = useState<DolphinControllerType>('xbox')
   const [loading, setLoading] = useState(true)
   const [openDropdownKey, setOpenDropdownKey] = useState<string | null>(null)
   const [selectedOptionIndex, setSelectedOptionIndex] = useState(0)
@@ -68,24 +85,36 @@ export default function ControllersSettings({
     onGridChange({ rows: TOTAL_ROWS, cols })
   }, [onGridChange])
 
-  // Load hotkeys from config
+  // Grid: 12 rows (F1-F12) + 1 row for Dolphin controller, 1 column each
   useEffect(() => {
-    const loadHotkeys = async () => {
+    onGridChange({ rows: TOTAL_ROWS, cols: Array(TOTAL_ROWS).fill(1) })
+  }, [onGridChange, TOTAL_ROWS])
+
+  // Load hotkeys and Dolphin controller type from config
+  useEffect(() => {
+    const loadSettings = async () => {
       try {
+        // Load hotkeys
         const savedHotkeys = await window.electronAPI.config.get('emulatorHotkeys')
         if (savedHotkeys && typeof savedHotkeys === 'object') {
           setHotkeys({ ...DEFAULT_HOTKEYS, ...(savedHotkeys as Record<string, EmulatorHotkeyAction>) })
         } else {
           setHotkeys(DEFAULT_HOTKEYS)
         }
+
+        // Load Dolphin controller type
+        const savedControllerType = await window.electronAPI.emulators.getDolphinControllerType()
+        if (savedControllerType) {
+          setDolphinControllerType(savedControllerType as DolphinControllerType)
+        }
       } catch (error) {
-        console.error('Failed to load hotkeys:', error)
+        console.error('Failed to load settings:', error)
         setHotkeys(DEFAULT_HOTKEYS)
       } finally {
         setLoading(false)
       }
     }
-    loadHotkeys()
+    loadSettings()
   }, [])
 
   // Save hotkey change
@@ -113,13 +142,60 @@ export default function ControllersSettings({
     }
   }
 
+  // Handle Dolphin controller type change
+  const handleDolphinControllerChange = async (type: DolphinControllerType) => {
+    setDolphinControllerType(type)
+    try {
+      // Get the currently connected gamepad to extract its actual device name
+      // This is important for Bluetooth controllers which have different names
+      // (e.g., "Xbox Wireless Controller" vs "Xbox One Controller")
+      const inputStore = useInputStore.getState()
+      const connectedGamepads = inputStore.gamepads.filter(g => g.connected)
+      const activeGamepad = inputStore.activeGamepadIndex !== null
+        ? connectedGamepads.find(g => g.index === inputStore.activeGamepadIndex)
+        : connectedGamepads[0]
+
+      // Extract the device name from the gamepad ID
+      // The Gamepad API returns IDs like "Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 02fd)"
+      // We want just the device name part for Dolphin's SDL device string
+      let deviceName: string | undefined
+      if (activeGamepad) {
+        // Extract the device name - take everything before the first parenthesis or the whole ID
+        const parenIndex = activeGamepad.id.indexOf('(')
+        deviceName = parenIndex > 0
+          ? activeGamepad.id.substring(0, parenIndex).trim()
+          : activeGamepad.id.trim()
+      }
+
+      const result = await window.electronAPI.emulators.configureDolphinController(type, deviceName)
+      if (result.success) {
+        const deviceInfo = deviceName ? ` (${deviceName})` : ''
+        addToast('success', `Dolphin configured for ${CONTROLLER_TYPE_OPTIONS.find(o => o.value === type)?.label}${deviceInfo}`)
+      } else {
+        addToast('error', result.error || 'Failed to configure Dolphin controller')
+      }
+    } catch (error) {
+      console.error('Failed to configure Dolphin controller:', error)
+      addToast('error', 'Failed to configure Dolphin controller')
+    }
+  }
+
   // Open dropdown for a key
   const openDropdown = useCallback((key: string) => {
+    // Handle Dolphin controller dropdown
+    if (key === 'dolphin') {
+      const currentIndex = CONTROLLER_TYPE_OPTIONS.findIndex(o => o.value === dolphinControllerType)
+      setOpenDropdownKey(key)
+      setSelectedOptionIndex(currentIndex >= 0 ? currentIndex : 0)
+      return
+    }
+
+    // Handle hotkey dropdown
     const currentValue = hotkeys[key] || 'none'
     const currentIndex = HOTKEY_OPTIONS.findIndex(o => o.value === currentValue)
     setOpenDropdownKey(key)
     setSelectedOptionIndex(currentIndex >= 0 ? currentIndex : 0)
-  }, [hotkeys])
+  }, [hotkeys, dolphinControllerType])
 
   // Close dropdown
   const closeDropdown = useCallback(() => {
@@ -130,6 +206,18 @@ export default function ControllersSettings({
   // Confirm dropdown selection
   const confirmDropdownSelection = useCallback(() => {
     if (!openDropdownKey) return
+
+    // Handle Dolphin controller type dropdown
+    if (openDropdownKey === 'dolphin') {
+      const selectedOption = CONTROLLER_TYPE_OPTIONS[selectedOptionIndex]
+      if (selectedOption) {
+        handleDolphinControllerChange(selectedOption.value)
+      }
+      closeDropdown()
+      return
+    }
+
+    // Handle hotkey dropdown
     const selectedOption = HOTKEY_OPTIONS[selectedOptionIndex]
     if (selectedOption) {
       handleHotkeyChange(openDropdownKey, selectedOption.value)
@@ -184,10 +272,15 @@ export default function ControllersSettings({
     enabled: isFocused,
     onNavigate: (direction) => {
       if (isDropdownOpen) {
+        // Use correct option count based on which dropdown is open
+        const maxIndex = openDropdownKey === 'dolphin'
+          ? CONTROLLER_TYPE_OPTIONS.length - 1
+          : HOTKEY_OPTIONS.length - 1
+
         if (direction === 'up') {
           setSelectedOptionIndex(prev => Math.max(0, prev - 1))
         } else if (direction === 'down') {
-          setSelectedOptionIndex(prev => Math.min(HOTKEY_OPTIONS.length - 1, prev + 1))
+          setSelectedOptionIndex(prev => Math.min(maxIndex, prev + 1))
         }
         return
       }
@@ -314,7 +407,7 @@ export default function ControllersSettings({
         </div>
       </section>
 
-      <section>
+      <section className="mb-8">
         <h3 className="text-lg font-semibold mb-4">Gamepad Controls</h3>
         <div className="bg-surface-800 rounded-lg p-4">
           <p className="text-surface-400 text-sm mb-3">
@@ -325,6 +418,91 @@ export default function ControllersSettings({
             Controller mapping is handled by EmulatorJS and can be customized via the gamepad icon in the emulator toolbar.
           </p>
         </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-3 mb-4">
+          <Gamepad2 size={20} className="text-accent" />
+          <h3 className="text-lg font-semibold">Dolphin Emulator (GameCube/Wii)</h3>
+        </div>
+        <p className="text-surface-400 text-sm mb-4">
+          Select your controller type to automatically configure Dolphin for GameCube and Wii games.
+          This setting is applied when launching games.
+        </p>
+
+        {(() => {
+          const isDolphinRowFocused = isFocused && focusedRow === DOLPHIN_ROW && !isDropdownOpen
+          const isDolphinDropdownOpen = openDropdownKey === 'dolphin'
+          const currentOption = CONTROLLER_TYPE_OPTIONS.find(o => o.value === dolphinControllerType)
+
+          return (
+            <div
+              data-focus-row={DOLPHIN_ROW}
+              data-focus-col={0}
+              className={`bg-surface-800 rounded-lg px-4 py-3 transition-all ${
+                isDolphinRowFocused || isDolphinDropdownOpen ? 'ring-2 ring-accent' : ''
+              } ${isDolphinRowFocused ? 'scale-[1.01]' : ''}`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="text-surface-300 font-medium">Controller Type</span>
+                </div>
+
+                {isDolphinDropdownOpen ? (
+                  <div className="flex-1 ml-4 bg-surface-900 border border-accent rounded overflow-hidden">
+                    {CONTROLLER_TYPE_OPTIONS.map((option, optIndex) => (
+                      <div
+                        key={option.value}
+                        className={`px-3 py-2 cursor-pointer transition-colors ${
+                          optIndex === selectedOptionIndex
+                            ? 'bg-accent text-white'
+                            : 'hover:bg-surface-800'
+                        }`}
+                        onClick={() => {
+                          handleDolphinControllerChange(option.value)
+                          closeDropdown()
+                        }}
+                      >
+                        <div className="font-medium text-sm">{option.label}</div>
+                        <div className={`text-xs ${optIndex === selectedOptionIndex ? 'text-white/80' : 'text-surface-400'}`}>
+                          {option.description}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : isDolphinRowFocused ? (
+                  <div
+                    className="flex-1 ml-4 flex items-center justify-between bg-surface-900 border border-accent rounded px-3 py-2 cursor-pointer"
+                    onClick={() => openDropdown('dolphin')}
+                  >
+                    <div>
+                      <span className="font-medium text-sm">{currentOption?.label || 'Xbox Controller'}</span>
+                      <span className="text-surface-400 text-xs ml-2">{currentOption?.description}</span>
+                    </div>
+                    <span className="text-accent text-xs">Press A</span>
+                  </div>
+                ) : (
+                  <select
+                    value={dolphinControllerType}
+                    onChange={(e) => handleDolphinControllerChange(e.target.value as DolphinControllerType)}
+                    className="flex-1 ml-4 bg-surface-900 border border-surface-700 rounded px-3 py-2 text-sm"
+                  >
+                    {CONTROLLER_TYPE_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} - {option.description}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
+        <p className="text-surface-500 text-xs mt-3">
+          Note: This configures Dolphin's GCPadNew.ini for the first controller port.
+          The configuration maps your controller's buttons to the GameCube layout (A, B, X, Y, Z, L, R, Start).
+        </p>
       </section>
     </div>
   )
